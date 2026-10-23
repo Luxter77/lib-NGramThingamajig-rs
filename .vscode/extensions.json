@@ -1,0 +1,6 @@
+{
+    "recommendations": [
+        "ms-vscode.notepadplusplus-keybindings",
+        "davidanson.vscode-markdownlint"
+    ]
+}

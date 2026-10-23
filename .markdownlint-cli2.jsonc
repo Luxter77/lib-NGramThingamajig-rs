@@ -1,0 +1,14 @@
+{
+  "config": {
+    "MD013": false,
+    "MD049": { "style": "underscore" }
+  },
+  "ignores": [
+    ".obsidian/templates/**/*.md",
+    ".agents/skills/lint-md/**/*.md",
+    "**/node_modules",
+    "**/.git",
+    "**/vendor"
+  ],
+  "gitignore": true
+}
