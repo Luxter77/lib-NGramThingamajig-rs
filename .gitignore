@@ -255,7 +255,13 @@ __marimo__/
 .DS_Store
 Thumbs.db
 
+# Nodeeeeeee jssss (and bun)
+node_modules
+bun.lock
+
+# CONTEXT.md+
+.agents/CONTEXT.md
+.agents/CONTEXT.md.d
 
 # Added by cargo
-
 /target

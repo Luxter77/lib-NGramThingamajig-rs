@@ -1,14 +1,30 @@
+// Linter rules doc:
+// - https://github.com/DavidAnson/markdownlint
+//
+// Note:
+// To comment out a single error:
+//   <!-- markdownlint-disable -->
+//   any violations you want
+//   <!-- markdownlint-restore -->
 {
   "config": {
-    "MD013": false,
+    "blank_lines": true, // DO Error on blank lines
+    "MD004": true, // Unordered list style
+    "MD007": { "indent": 2 }, // Unordered list indentation
+    "MD013": { "line_length": 380 }, // Line length 80 is far to short
+    "MD026": { "punctuation": ".,;:!。，；:"}, // List of not allowed
+    "MD036": true, // Disallow Emphasis used instead of a heading
+    "MD040": true, // Disallow ``` blocks in md files with no language specified
     "MD049": { "style": "underscore" }
   },
   "ignores": [
     ".obsidian/templates/**/*.md",
-    ".agents/skills/lint-md/**/*.md",
     "**/node_modules",
     "**/.git",
-    "**/vendor"
+    "**/vendor",
+    // Excluding lint-md itself this because its noisy to lint its own examples;
+    // It however, does not mean mean that file is allowed to break its own rules!
+    ".agents/skills/lint-md/**/*.md"
   ],
-  "gitignore": true
+  "gitignore": false
 }

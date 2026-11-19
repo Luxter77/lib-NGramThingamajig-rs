@@ -4,3 +4,15 @@ version = "0.1.0"
 edition = "2024"
 
 [dependencies]
+base64 = "0.23.1"
+chrono = { version = "0.4.45", features = ["serde"] }
+encoding_rs = "0.8.44"
+flate2 = "1.1.11"
+glob = "0.3.4"
+memmap2 = "0.9.12"
+rand = "0.10.4"
+rusqlite = { version = "0.43.0", features = ["bundled", "chrono"] }
+rust_decimal = "1.43.0"
+serde = { version = "1.0.229", features = ["derive"] }
+serde_json = "1.0.154"
+sysinfo = "0.40.4"
