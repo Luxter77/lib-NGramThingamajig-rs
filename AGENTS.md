@@ -1,4 +1,4 @@
-# T-NEWPROJECT-T: AGENTS.md
+# AGENTS.md
 
 lib-NGramThingamajig-rs es un byte-level n-gram sequence model written in rust.
 
