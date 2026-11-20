@@ -1,8 +1,12 @@
 use std::collections::{BTreeMap, HashMap};
+use std::hash::{Hash, Hasher};
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Default)] pub struct TokenId(pub u64);
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Default)] pub struct ChainId(pub usize);
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Default)] pub struct TokenCount(pub u64);
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Default)]
+pub struct TokenId(pub u64);
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Default)]
+pub struct ChainId(pub usize);
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Default)]
+pub struct TokenCount(pub u64);
 
 #[derive(Debug, Clone, Default)]
 pub enum TokenDist {
@@ -38,24 +42,46 @@ impl TokenDist {
     }
 }
 
-type TokenChain  = HashMap<TokenId,  TokenDist>;
-type TokenChains = BTreeMap<ChainId, TokenChain>;
+pub type TokenChain = HashMap<TokenId, TokenDist>;
+pub type TokenChains = BTreeMap<ChainId, TokenChain>;
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)] pub enum SpecialToken { Start, End, NoItem, ZeroGram, WordListStart }
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum SpecialToken {
+    Start,
+    End,
+    NoItem,
+    ZeroGram,
+    WordListStart,
+}
 
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum TokenValue {
     Special(SpecialToken),
     Normal(Vec<u8>),
 }
 
+impl Hash for TokenValue {
+    fn hash<H: Hasher>(&self, state: &mut H) {
+        match self {
+            TokenValue::Special(special) => {
+                0u8.hash(state);
+                special.hash(state);
+            }
+            TokenValue::Normal(bytes) => {
+                1u8.hash(state);
+                bytes.as_slice().hash(state);
+            }
+        }
+    }
+}
+
 impl SpecialToken {
     pub const fn as_bytes(&self) -> &'static [u8] {
         match self {
-            SpecialToken::Start         => b"__TOKEN__START__",
-            SpecialToken::End           => b"___TOKEN__END___",
-            SpecialToken::ZeroGram      => b"__TOKEN_0_GRAM__",
-            SpecialToken::NoItem        => b"__TOKEN_NOITEM__",
+            SpecialToken::Start => b"__TOKEN__START__",
+            SpecialToken::End => b"___TOKEN__END___",
+            SpecialToken::ZeroGram => b"__TOKEN_0_GRAM__",
+            SpecialToken::NoItem => b"__TOKEN_NOITEM__",
             SpecialToken::WordListStart => b"_TOKEN_WL_START_",
         }
     }
