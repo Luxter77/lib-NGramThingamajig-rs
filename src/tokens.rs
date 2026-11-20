@@ -40,9 +40,17 @@ impl TokenDist {
     pub fn increment(&mut self, token: TokenId) {
         self.add(token, 1);
     }
+
+    pub fn with_capacity(capacity: usize) -> Self {
+        if capacity <= 1 {
+            TokenDist::Empty
+        } else {
+            TokenDist::Many(Box::new(HashMap::with_capacity(capacity)))
+        }
+    }
 }
 
-pub type TokenChain = HashMap<TokenId, TokenDist>;
+pub type TokenChain  = HashMap<TokenId, TokenDist>;
 pub type TokenChains = BTreeMap<ChainId, TokenChain>;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]

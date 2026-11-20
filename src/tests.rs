@@ -44,7 +44,10 @@ pub fn run() {
 
     let mut chain: TokenChain = TokenChain::new();
     for pair in ids.windows(2) {
-        chain.entry(pair[0]).or_default().increment(pair[1]);
+        chain
+            .entry(pair[0])
+            .or_insert_with(|| TokenDist::with_capacity(2))
+            .increment(pair[1]);
     }
 
     let mut chains = TokenChains::new();
@@ -381,6 +384,35 @@ mod unit {
             TokenDist::Many(map) => {
                 assert_eq!(map.get(&TokenId(1)).map(|count| count.0), Some(3));
                 assert_eq!(map.get(&TokenId(2)).map(|count| count.0), Some(1));
+            }
+            other => panic!("expected Many, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn with_capacity_selects_variant_by_capacity() {
+        assert!(matches!(TokenDist::with_capacity(0), TokenDist::Empty));
+        assert!(matches!(TokenDist::with_capacity(1), TokenDist::Empty));
+
+        match TokenDist::with_capacity(4) {
+            TokenDist::Many(map) => {
+                assert!(map.is_empty());
+                assert!(map.capacity() >= 4);
+            }
+            other => panic!("expected Many, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn with_capacity_accepts_additions() {
+        let mut dist = TokenDist::with_capacity(8);
+        dist.increment(TokenId(1));
+        dist.add(TokenId(2), 3);
+
+        match &dist {
+            TokenDist::Many(map) => {
+                assert_eq!(map.get(&TokenId(1)).map(|count| count.0), Some(1));
+                assert_eq!(map.get(&TokenId(2)).map(|count| count.0), Some(3));
             }
             other => panic!("expected Many, got {other:?}"),
         }

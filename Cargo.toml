@@ -11,7 +11,7 @@ ahash = "0.8.12"
 # flate2 = "1.1.11"
 # glob = "0.3.4"
 indexmap = "2.14.2"
-# memmap2 = "0.9.12"
+memmap2 = "0.9.12"
 rand = "0.10.4"
 # rusqlite = { version = "0.43.0", features = ["bundled", "chrono"] }
 # rust_decimal = "1.43.0"
