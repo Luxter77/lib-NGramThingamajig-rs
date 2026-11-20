@@ -15,8 +15,6 @@ Para sintaxis Obsidian, leer `obsidian-markdown`.
 
 La corrida carga la configuración que lista `--help`, desde la raíz. Acá es `.markdownlint-cli2.jsonc`.
 
-Lo excluido es el array `ignores` de ese archivo. Con `gitignore: true`, también queda afuera lo que cubre `.gitignore`. No duplicar ni reinterpretar esa lista.
-
 `--fix` se puede anular desde esa configuración. Este jsonc no define `fix`. No agregarlo: si queda en false, el comando no escribe aunque lleve `--fix`.
 
 Una regla que se queja suele ser intencional. No cambiar reglas ni ignores para silenciar hallazgos.
