@@ -48,6 +48,18 @@ const TYPOGRAPHIC_EXCLUDE = [
   "CLAUDE.md",
 ];
 
+// Directories excluded from typographic checks (they contain intentional examples)
+const TYPOGRAPHIC_EXCLUDE_DIRS = [
+  ".agents/rules/",
+];
+
+function isTypographicExcluded(file: string): boolean {
+  if (TYPOGRAPHIC_EXCLUDE.includes(file)) {
+    return true;
+  }
+  return TYPOGRAPHIC_EXCLUDE_DIRS.some((dir) => file.startsWith(dir));
+}
+
 interface LintIssue {
   file: string;
   line: number;
@@ -112,7 +124,7 @@ function checkFrontmatter(file: string, content: string) {
 }
 
 function checkFile(file: string, content: string) {
-  const isTypoExcluded = TYPOGRAPHIC_EXCLUDE.includes(file);
+  const isTypoExcluded = isTypographicExcluded(file);
 
   checkFrontmatter(file, content);
 

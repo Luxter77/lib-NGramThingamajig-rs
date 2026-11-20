@@ -100,7 +100,7 @@ El script de lint revisa esto automáticamente en todos los archivos markdown (s
 - Negrita (`**texto**`)
 - Cursiva con asteriscos (`*texto*`)
 
-Los archivos en `TYPOGRAPHIC_EXCLUDE` (`AGENTS.md`, `CLAUDE.md`, y este mismo skill) se excluyen de las comprobaciones tipográficas automáticas únicamente porque contienen ejemplos negativos para ilustrar las reglas. Las comprobaciones estructurales (WIK001-004, YML001, ESC001-002) corren en todos los archivos.
+Los archivos en `TYPOGRAPHIC_EXCLUDE` (`AGENTS.md`, `CLAUDE.md`, y este mismo skill) y los archivos bajo los directorios en `TYPOGRAPHIC_EXCLUDE_DIRS` (`.agents/rules/`) se excluyen de las comprobaciones tipográficas automáticas únicamente porque contienen ejemplos negativos para ilustrar las reglas. Las comprobaciones estructurales (WIK001-004, YML001, ESC001-002) corren en todos los archivos.
 
 La única excepción permitida para estos patrones prohibidos es mostrar ejemplos negativos explícitos al documentar la regla misma (por ejemplo, ilustrar qué patrón buscar o mostrar "si está así, pasarlo a esta otra forma"). Fuera de la cita literal del patrón prohibido, el texto propio de estos archivos excluidos debe cumplir todas las reglas tipográficas: no usar negrita como énfasis en su propia redacción o listas, no usar cursiva con asteriscos, no usar guiones largos para puntuación propia ni comillas curvas.
 
