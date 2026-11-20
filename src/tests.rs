@@ -155,7 +155,8 @@ fn generate(chain: &TokenChain, seed: TokenId, steps: usize, rng: &mut SmallRng)
     sequence
 }
 
-fn sample(dist: &TokenDist, rng: &mut SmallRng) -> Option<TokenId> {
+// this shouldnt actually be the one used but while developing its te best one
+pub fn sample(dist: &TokenDist, rng: &mut SmallRng) -> Option<TokenId> {
     let total = total(dist);
     if total == 0 {
         return None;
