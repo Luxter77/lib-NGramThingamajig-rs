@@ -46,3 +46,13 @@ pub fn sliding_window_reader<'a>(
 ) -> impl Iterator<Item = &'a [u8]> {
     mmap.windows(window_size).step_by(1)
 }
+
+pub fn decode_chopped_utf8(bytes: &[u8]) -> String {
+    let mut decoder = encoding_rs::UTF_8.new_decoder();
+
+    let mut output = String::with_capacity(bytes.len());
+
+    let (_result, _bytes_read, _had_errors) = decoder.decode_to_string(bytes, &mut output, false);
+
+    output
+}

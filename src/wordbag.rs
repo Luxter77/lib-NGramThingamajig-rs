@@ -9,6 +9,7 @@ use crate::tokens::{SpecialToken, TokenId, TokenValue};
 pub enum TokenRef<'a> {
     Special(SpecialToken),
     Normal(&'a [u8]),
+    Next(&'a u8),
 }
 
 impl Hash for TokenRef<'_> {
@@ -22,6 +23,10 @@ impl Hash for TokenRef<'_> {
                 1u8.hash(state);
                 bytes.hash(state);
             }
+            TokenRef::Next(byte) => {
+                1u8.hash(state);
+                std::slice::from_ref(byte).hash(state);
+            }
         }
     }
 }
@@ -31,6 +36,7 @@ impl Equivalent<TokenValue> for TokenRef<'_> {
         match (self, key) {
             (TokenRef::Special(a), TokenValue::Special(b)) => a == b,
             (TokenRef::Normal(a), TokenValue::Normal(b)) => *a == b.as_slice(),
+            (TokenRef::Next(a), TokenValue::Next(b)) => *a == b,
             _ => false,
         }
     }
@@ -46,6 +52,7 @@ impl TokenInput for TokenValue {
         match self {
             TokenValue::Special(special) => TokenRef::Special(*special),
             TokenValue::Normal(bytes) => TokenRef::Normal(bytes.as_slice()),
+            TokenValue::Next(byte) => TokenRef::Next(byte),
         }
     }
 
@@ -84,6 +91,16 @@ impl TokenInput for &[u8] {
     }
 }
 
+impl TokenInput for &u8 {
+    fn as_token_ref(&self) -> TokenRef<'_> {
+        TokenRef::Next(*self)
+    }
+
+    fn into_token_value(self) -> TokenValue {
+        TokenValue::Next(*self)
+    }
+}
+
 impl<const N: usize> TokenInput for &[u8; N] {
     fn as_token_ref(&self) -> TokenRef<'_> {
         TokenRef::Normal(self.as_slice())
@@ -103,6 +120,7 @@ impl TokenInput for TokenRef<'_> {
         match self {
             TokenRef::Special(special) => TokenValue::Special(special),
             TokenRef::Normal(bytes) => TokenValue::Normal(bytes.to_vec()),
+            TokenRef::Next(byte) => TokenValue::Next(*byte),
         }
     }
 }
@@ -130,7 +148,6 @@ impl WordBag<RandomState> {
     pub fn setup_special_tokens(&mut self) {
         self.s2i(SpecialToken::Start);
         self.s2i(SpecialToken::End);
-        self.s2i(SpecialToken::NoItem);
         self.s2i(SpecialToken::ZeroGram);
         self.s2i(SpecialToken::WordListStart);
     }

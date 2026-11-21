@@ -25,7 +25,6 @@ pub fn run() {
 
     let start = wordbag.s2i(SpecialToken::Start);
     let end = wordbag.s2i(SpecialToken::End);
-    let no_item = wordbag.s2i(SpecialToken::NoItem);
     let zero_gram = wordbag.s2i(SpecialToken::ZeroGram);
     let word_list_start = wordbag.s2i(SpecialToken::WordListStart);
 
@@ -36,7 +35,7 @@ pub fn run() {
     println!("window: {WINDOW} bytes, {} windows", windows.len());
     println!("vocabulary: {} tokens", wordbag.len());
     println!(
-        "start={start:?} end={end:?} no_item={no_item:?} zero_gram={zero_gram:?} word_list_start={word_list_start:?}"
+        "start={start:?} end={end:?} zero_gram={zero_gram:?} word_list_start={word_list_start:?}"
     );
 
     assert_eq!(ids.len(), PARAGRAPH.len() - WINDOW + 1);
@@ -268,7 +267,6 @@ mod unit {
         let tokens = [
             SpecialToken::Start,
             SpecialToken::End,
-            SpecialToken::NoItem,
             SpecialToken::ZeroGram,
             SpecialToken::WordListStart,
         ];

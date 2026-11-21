@@ -50,14 +50,13 @@ impl TokenDist {
     }
 }
 
-pub type TokenChain = HashMap<TokenId, TokenDist>;
+pub type TokenChain  = HashMap<TokenId,  TokenDist>;
 pub type TokenChains = BTreeMap<ChainId, TokenChain>;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum SpecialToken {
     Start,
     End,
-    NoItem,
     ZeroGram,
     WordListStart,
 }
@@ -66,6 +65,7 @@ pub enum SpecialToken {
 pub enum TokenValue {
     Special(SpecialToken),
     Normal(Vec<u8>),
+    Next(u8)
 }
 
 impl Hash for TokenValue {
@@ -79,6 +79,10 @@ impl Hash for TokenValue {
                 1u8.hash(state);
                 bytes.as_slice().hash(state);
             }
+            TokenValue::Next(byte) => {
+                1u8.hash(state);
+                std::slice::from_ref(byte).hash(state);
+            }
         }
     }
 }
@@ -89,7 +93,6 @@ impl SpecialToken {
             SpecialToken::Start => b"__TOKEN__START__",
             SpecialToken::End => b"___TOKEN__END___",
             SpecialToken::ZeroGram => b"__TOKEN_0_GRAM__",
-            SpecialToken::NoItem => b"__TOKEN_NOITEM__",
             SpecialToken::WordListStart => b"_TOKEN_WL_START_",
         }
     }
@@ -100,6 +103,7 @@ impl TokenValue {
         match self {
             TokenValue::Special(special) => special.as_bytes(),
             TokenValue::Normal(bytes) => bytes.as_slice(),
+            TokenValue::Next(byte) => std::slice::from_ref(byte),
         }
     }
 }
