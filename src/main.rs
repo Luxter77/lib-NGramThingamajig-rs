@@ -1,7 +1,7 @@
-mod wordbag;
-mod tokens;
-mod tests;
 mod io;
+mod tests;
+mod tokens;
+mod wordbag;
 
 const CTX_LEN: usize = 5;
 const TEST_INPUT_FILE: &'static str = r"src/main.rs";
@@ -13,8 +13,14 @@ fn main() {
     // init
     let mut chains = tokens::TokenChains::new();
 
-    chains.insert(tokens::ChainId(0), std::collections::HashMap::with_capacity(1));
-    chains.insert(tokens::ChainId(1), std::collections::HashMap::with_capacity(u8::MAX as usize));
+    chains.insert(
+        tokens::ChainId(0),
+        std::collections::HashMap::with_capacity(1),
+    );
+    chains.insert(
+        tokens::ChainId(1),
+        std::collections::HashMap::with_capacity(u8::MAX as usize),
+    );
 
     for n_gram in 2..=CTX_LEN {
         chains.insert(tokens::ChainId(n_gram), std::collections::HashMap::new());
@@ -31,8 +37,8 @@ fn main() {
                     for window in io::sliding_window_reader(&file_reader, n_gram) {
                         bag.s2i(window);
                     }
-                },
-                Err(_) => unreachable!()
+                }
+                Err(_) => unreachable!(),
             }
         }
     }
@@ -42,7 +48,7 @@ fn main() {
             Ok(file_reader) => {
                 for n_gram in 0..=CTX_LEN {
                     for window in io::sliding_window_reader(&file_reader, n_gram + 1) {
-                        if let Some((next_t , prefix_t)) = window.split_last() {
+                        if let Some((next_t, prefix_t)) = window.split_last() {
                             let prefix_key = if n_gram == 0 {
                                 zero_gram
                             } else {
@@ -57,8 +63,8 @@ fn main() {
                         }
                     }
                 }
-            },
-            Err(_) => unreachable!()
+            }
+            Err(_) => unreachable!(),
         }
     }
 
@@ -84,7 +90,11 @@ fn main() {
                     }
                 }
             };
-            match chains.get(&tokens::ChainId(n_gram)).unwrap().get(&this_prefix_t) {
+            match chains
+                .get(&tokens::ChainId(n_gram))
+                .unwrap()
+                .get(&this_prefix_t)
+            {
                 Some(dist) => {
                     match tests::sample(dist, &mut rng) {
                         Some(sample_t) => {
@@ -101,17 +111,19 @@ fn main() {
                                                 }
                                                 None => todo!(),
                                             }
-                                        },
-                                        tokens::TokenValue::Special(_) => { todo!() },
+                                        }
+                                        tokens::TokenValue::Special(_) => {
+                                            todo!()
+                                        }
                                     }
-                            },
+                                }
                                 None => todo!(),
                             };
                             break;
-                        },
+                        }
                         None => unreachable!(),
                     }
-                },
+                }
                 None => continue,
             }
         }
@@ -120,16 +132,14 @@ fn main() {
     println!("SAMPLED: \n\n{}\n\n", decode_chopped_utf8(&output));
     println!("SAMPLED RAW: \n\n{:?}\n\n", &output);
     println!("PREFIX BUFFER STATE: \n\n{:?}\n\n", &prefix_t);
-
 }
 
 fn decode_chopped_utf8(bytes: &[u8]) -> String {
     let mut decoder = encoding_rs::UTF_8.new_decoder();
-    
+
     let mut output = String::with_capacity(bytes.len());
-    
-    let (_result, _bytes_read, _had_errors) = 
-        decoder.decode_to_string(bytes, &mut output, false);
-        
+
+    let (_result, _bytes_read, _had_errors) = decoder.decode_to_string(bytes, &mut output, false);
+
     output
 }

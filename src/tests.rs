@@ -132,8 +132,13 @@ pub fn run() {
     assert_eq!(generated.first(), Some(&seed));
     assert!(generated.len() <= 41);
     for pair in generated.windows(2) {
-        let dist = chain.get(&pair[0]).expect("generated token must be in the chain");
-        assert!(count_of(dist, pair[1]) > 0, "transition must exist in the chain");
+        let dist = chain
+            .get(&pair[0])
+            .expect("generated token must be in the chain");
+        assert!(
+            count_of(dist, pair[1]) > 0,
+            "transition must exist in the chain"
+        );
     }
 }
 
@@ -270,7 +275,10 @@ mod unit {
 
         let mut seen = std::collections::HashSet::new();
         for token in tokens {
-            assert!(seen.insert(token.as_bytes()), "duplicate bytes for {token:?}");
+            assert!(
+                seen.insert(token.as_bytes()),
+                "duplicate bytes for {token:?}"
+            );
         }
         assert_eq!(seen.len(), tokens.len());
     }
@@ -351,8 +359,14 @@ mod unit {
     fn token_input_conversions_preserve_value() {
         let bytes: &[u8] = b"abc";
 
-        assert_eq!(bytes.into_token_value(), TokenValue::Normal(b"abc".to_vec()));
-        assert_eq!(b"abc".into_token_value(), TokenValue::Normal(b"abc".to_vec()));
+        assert_eq!(
+            bytes.into_token_value(),
+            TokenValue::Normal(b"abc".to_vec())
+        );
+        assert_eq!(
+            b"abc".into_token_value(),
+            TokenValue::Normal(b"abc".to_vec())
+        );
         assert_eq!(
             SpecialToken::End.into_token_value(),
             TokenValue::Special(SpecialToken::End)
@@ -437,7 +451,9 @@ mod unit {
         assert_eq!(transitions as usize, ids.len() - 1);
 
         for pair in ids.windows(2) {
-            let dist = chain.get(&pair[0]).expect("source window must be in the chain");
+            let dist = chain
+                .get(&pair[0])
+                .expect("source window must be in the chain");
             assert!(count_of(dist, pair[1]) > 0);
         }
     }
@@ -450,7 +466,10 @@ mod unit {
         for dist in chain.values() {
             for _ in 0..20 {
                 let picked = sample(dist, &mut rng).expect("non-empty distribution must sample");
-                assert!(count_of(dist, picked) > 0, "sample must come from the distribution");
+                assert!(
+                    count_of(dist, picked) > 0,
+                    "sample must come from the distribution"
+                );
             }
         }
     }
@@ -472,7 +491,9 @@ mod unit {
         assert_eq!(generated.first(), Some(&seed));
         assert!(generated.len() > 1);
         for pair in generated.windows(2) {
-            let dist = chain.get(&pair[0]).expect("generated token must be in the chain");
+            let dist = chain
+                .get(&pair[0])
+                .expect("generated token must be in the chain");
             assert!(count_of(dist, pair[1]) > 0);
         }
     }
@@ -485,7 +506,8 @@ mod unit {
 
             for (source, dist) in &chain {
                 for _ in 0..20 {
-                    let picked = sample(dist, &mut rng).expect("non-empty distribution must sample");
+                    let picked =
+                        sample(dist, &mut rng).expect("non-empty distribution must sample");
                     assert!(
                         count_of(dist, picked) > 0,
                         "order {window} source {source:?} sampled {picked:?} outside its distribution"

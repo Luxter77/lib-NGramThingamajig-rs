@@ -1,6 +1,6 @@
-use std::path::Path;
 use std::fs::File;
 use std::io;
+use std::path::Path;
 
 use memmap2::Mmap;
 
@@ -40,7 +40,9 @@ where
     })
 }
 
-pub fn sliding_window_reader<'a>(mmap: &'a Mmap, window_size: usize) -> impl Iterator<Item = &'a [u8]> {
+pub fn sliding_window_reader<'a>(
+    mmap: &'a Mmap,
+    window_size: usize,
+) -> impl Iterator<Item = &'a [u8]> {
     mmap.windows(window_size).step_by(1)
 }
-

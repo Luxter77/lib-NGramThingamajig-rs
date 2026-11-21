@@ -122,11 +122,11 @@ impl WordBag<RandomState> {
     pub fn new() -> Self {
         Self::with_capacity_and_hasher(0, RandomState::new())
     }
-    
+
     pub fn with_capacity(capacity: usize) -> Self {
         Self::with_capacity_and_hasher(capacity, RandomState::new())
     }
-    
+
     pub fn setup_special_tokens(&mut self) {
         self.s2i(SpecialToken::Start);
         self.s2i(SpecialToken::End);

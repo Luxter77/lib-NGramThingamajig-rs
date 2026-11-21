@@ -50,7 +50,7 @@ impl TokenDist {
     }
 }
 
-pub type TokenChain  = HashMap<TokenId, TokenDist>;
+pub type TokenChain = HashMap<TokenId, TokenDist>;
 pub type TokenChains = BTreeMap<ChainId, TokenChain>;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
