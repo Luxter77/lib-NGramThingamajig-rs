@@ -3,12 +3,16 @@ mod tests;
 mod tokens;
 mod wordbag;
 
-const CTX_LEN: usize = 14;
-const SAMPLE_SEQ: usize = 100;
+use zzz::ProgressBarIterExt as _;
+use glob::glob;
 
-fn train_wordbag_from_files(bag: &mut wordbag::WordBag, files: &[&std::path::Path]) {
-    for n_gram in 1..=CTX_LEN {
-        for file_reader in io::get_file_readers(files) {
+const CTX_LEN:    usize = 7;
+const SAMPLE_SEQ: usize = 10000;
+
+fn train_wordbag_from_files(bag: &mut wordbag::WordBag, files: &Vec<std::path::PathBuf>) {
+    println!("train_wordbag_from_files:");
+    for n_gram in (1..=CTX_LEN).progress() {
+        for file_reader in io::get_file_readers(files).progress() {
             match file_reader {
                 Ok(file_reader) => {
                     for window in io::sliding_window_reader(&file_reader, n_gram) {
@@ -21,11 +25,12 @@ fn train_wordbag_from_files(bag: &mut wordbag::WordBag, files: &[&std::path::Pat
     }
 }
 
-fn train_chains_from_files(bag: &mut wordbag::WordBag, chains: &mut tokens::TokenChains, test_files: &[&std::path::Path]) {
+fn train_chains_from_files(bag: &mut wordbag::WordBag, chains: &mut tokens::TokenChains, files: &Vec<std::path::PathBuf>) {
     let token_zero_gram = bag.s2i(tokens::SpecialToken::ZeroGram);
     let token_start = bag.s2i(tokens::SpecialToken::Start);
 
-    for file_reader in io::get_file_readers(test_files) {
+    println!("train_chains_from_files:");
+    for file_reader in io::get_file_readers(files).progress() {
         match file_reader {
             Ok(file_reader) => {
                 for n_gram in 0..=CTX_LEN {
@@ -79,7 +84,8 @@ fn sample_chains(bag: &mut wordbag::WordBag, chains: &mut tokens::TokenChains) {
     let token_zero_gram = bag.s2i(tokens::SpecialToken::ZeroGram);
     let token_start = bag.s2i(tokens::SpecialToken::Start);
 
-    'sample: for _ in 0..SAMPLE_SEQ {
+    println!("sample_chains:");
+    'sample: for _ in (0..SAMPLE_SEQ).progress() {
         'n_gram_iter: for n_gram in (0..=CTX_LEN).rev() {
             let this_prefix_t: tokens::TokenId;
             if n_gram == 0 {
@@ -136,7 +142,8 @@ fn sample_chains(bag: &mut wordbag::WordBag, chains: &mut tokens::TokenChains) {
 fn main() {
     tests::run();
 
-    let test_files = [std::path::Path::new(r"src/main.rs")];
+    let mut test_files: Vec<std::path::PathBuf> = Vec::new();
+    test_files.append(&mut glob("**/*.rs").ok().into_iter().flatten().filter_map(Result::ok).collect());
 
     // init
     let mut chains: tokens::TokenChains = tokens::TokenChains::new();

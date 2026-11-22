@@ -21,7 +21,7 @@ where
         .into_iter()
         .map(|p| (id_from_path(p.as_ref()), p))
         .collect();
-
+    
     md_paths.sort_by_key(|(id, _)| *id);
 
     md_paths.into_iter().filter_map(|(_, path)| {
@@ -34,7 +34,7 @@ where
             Ok(meta) if meta.len() == 0 => return None,
             Err(e) => return Some(Err(e)),
             _ => {}
-        }
+        };
 
         Some(unsafe { Mmap::map(&file) })
     })
