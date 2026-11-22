@@ -24,7 +24,7 @@ impl Hash for TokenRef<'_> {
                 bytes.hash(state);
             }
             TokenRef::Next(byte) => {
-                1u8.hash(state);
+                2u8.hash(state);
                 std::slice::from_ref(byte).hash(state);
             }
         }
