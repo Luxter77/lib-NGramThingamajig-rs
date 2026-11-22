@@ -1,6 +1,8 @@
 use std::collections::{BTreeMap, HashMap};
 use std::hash::{Hash, Hasher};
 
+use ahash::RandomState;
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Default)]
 pub struct TokenId(pub u64);
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Default)]
@@ -13,7 +15,7 @@ pub enum TokenDist {
     #[default]
     Empty,
     Single(TokenId, TokenCount),
-    Many(Box<HashMap<TokenId, TokenCount>>),
+    Many(Box<HashMap<TokenId, TokenCount, RandomState>>),
 }
 
 impl TokenDist {
@@ -26,7 +28,7 @@ impl TokenDist {
                 count.0 += amount;
             }
             TokenDist::Single(existing_id, count) => {
-                let mut map = HashMap::with_capacity(2);
+                let mut map = HashMap::with_capacity_and_hasher(2, RandomState::new());
                 map.insert(*existing_id, *count);
                 map.insert(token, TokenCount(amount));
                 *self = TokenDist::Many(Box::new(map));
@@ -45,12 +47,12 @@ impl TokenDist {
         if capacity <= 1 {
             TokenDist::Empty
         } else {
-            TokenDist::Many(Box::new(HashMap::with_capacity(capacity)))
+            TokenDist::Many(Box::new(HashMap::with_capacity_and_hasher(capacity, RandomState::new())))
         }
     }
 }
 
-pub type TokenChain  = HashMap<TokenId,  TokenDist>;
+pub type TokenChain  = HashMap<TokenId,  TokenDist, RandomState>;
 pub type TokenChains = BTreeMap<ChainId, TokenChain>;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]

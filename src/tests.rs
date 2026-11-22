@@ -1,6 +1,8 @@
 use rand::rngs::SmallRng;
 use rand::{RngExt, SeedableRng};
 
+use ahash::RandomState;
+
 use crate::tokens::{
     ChainId, SpecialToken, TokenChain, TokenChains, TokenCount, TokenDist, TokenId, TokenValue,
 };
@@ -41,7 +43,7 @@ pub fn run() {
     assert_eq!(ids.len(), PARAGRAPH.len() - WINDOW + 1);
     assert!(!wordbag.is_empty());
 
-    let mut chain: TokenChain = TokenChain::new();
+    let mut chain: TokenChain = TokenChain::with_hasher(RandomState::new());
     for pair in ids.windows(2) {
         chain
             .entry(pair[0])
@@ -51,7 +53,7 @@ pub fn run() {
 
     let mut chains = TokenChains::new();
     for (position, pair) in ids.windows(2).enumerate() {
-        let mut step: TokenChain = TokenChain::new();
+        let mut step: TokenChain = TokenChain::with_hasher(RandomState::new());
         step.entry(pair[0]).or_default().increment(pair[1]);
         chains.insert(ChainId(position), step);
     }
@@ -245,7 +247,7 @@ fn build_chain(paragraph: &str, window: usize) -> (WordBag, TokenChain) {
         .map(|window| wordbag.s2i(window))
         .collect();
 
-    let mut chain: TokenChain = TokenChain::new();
+    let mut chain: TokenChain = TokenChain::with_hasher(RandomState::new());
     for pair in ids.windows(2) {
         chain.entry(pair[0]).or_default().increment(pair[1]);
     }
@@ -440,7 +442,7 @@ mod unit {
             .map(|window| wordbag.s2i(window))
             .collect();
 
-        let mut chain: TokenChain = TokenChain::new();
+        let mut chain: TokenChain = TokenChain::with_hasher(RandomState::new());
         for pair in ids.windows(2) {
             chain.entry(pair[0]).or_default().increment(pair[1]);
         }

@@ -3,11 +3,14 @@ mod tests;
 mod tokens;
 mod wordbag;
 
+use std::collections::HashMap;
+
+use ahash::RandomState;
 use zzz::ProgressBarIterExt as _;
 use glob::glob;
 
-const CTX_LEN:    usize = 7;
-const SAMPLE_SEQ: usize = 10000;
+const CTX_LEN:    usize = 4;
+const SAMPLE_SEQ: usize = 1000;
 
 fn train_wordbag_from_files(bag: &mut wordbag::WordBag, files: &Vec<std::path::PathBuf>) {
     println!("train_wordbag_from_files:");
@@ -148,11 +151,11 @@ fn main() {
     // init
     let mut chains: tokens::TokenChains = tokens::TokenChains::new();
 
-    chains.insert(tokens::ChainId(0), std::collections::HashMap::with_capacity(1));
-    chains.insert(tokens::ChainId(1), std::collections::HashMap::with_capacity(u8::MAX as usize));
+    chains.insert(tokens::ChainId(0), HashMap::with_capacity_and_hasher(1, RandomState::new()));
+    chains.insert(tokens::ChainId(1), HashMap::with_capacity_and_hasher(u8::MAX as usize, RandomState::new()));
 
     for n_gram in 2..=CTX_LEN {
-        chains.insert(tokens::ChainId(n_gram), std::collections::HashMap::new());
+        chains.insert(tokens::ChainId(n_gram), HashMap::with_hasher(RandomState::new()));
     }
 
     let mut bag = wordbag::WordBag::with_capacity((u8::MAX as usize) * 5);
