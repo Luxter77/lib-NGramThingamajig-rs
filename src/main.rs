@@ -6,20 +6,22 @@ mod wordbag;
 use std::collections::HashMap;
 
 use ahash::RandomState;
-use zzz::ProgressBarIterExt as _;
 use glob::glob;
+use zzz::ProgressBarIterExt as _;
 
-const CTX_LEN:    usize = 4;
-const SAMPLE_SEQ: usize = 1000;
+const CTX_LEN: usize = 15;
+const SAMPLE_SEQ: usize = 5000;
+const PREFILL_CT: u8 = 0;
 
 fn train_wordbag_from_files(bag: &mut wordbag::WordBag, files: &Vec<std::path::PathBuf>) {
     println!("train_wordbag_from_files:");
+
     for n_gram in (1..=CTX_LEN).progress() {
-        for file_reader in io::get_file_readers(files).progress() {
+        for file_reader in io::get_file_readers(files) {
             match file_reader {
                 Ok(file_reader) => {
                     for window in io::sliding_window_reader(&file_reader, n_gram) {
-                        bag.s2i(tokens::TokenValue::Normal(window.into()));
+                        bag.s2i(window);
                     }
                 }
                 Err(_) => unreachable!(),
@@ -32,28 +34,46 @@ fn train_chains_from_files(bag: &mut wordbag::WordBag, chains: &mut tokens::Toke
     let token_zero_gram = bag.s2i(tokens::SpecialToken::ZeroGram);
     let token_start = bag.s2i(tokens::SpecialToken::Start);
 
+    let next_tokens: [tokens::TokenId; u8::MAX as usize + 1] = std::array::from_fn(|i| bag.s2i(tokens::TokenValue::Next(i as u8)));
+
     println!("train_chains_from_files:");
     for file_reader in io::get_file_readers(files).progress() {
         match file_reader {
             Ok(file_reader) => {
                 for n_gram in 0..=CTX_LEN {
                     let mut window_iterator = io::sliding_window_reader(&file_reader, n_gram + 1);
-                    let mut window: &[u8];
+                    let mut window: &[u8] = &[];
 
                     let chain: &mut tokens::TokenChain = chains.get_mut(&tokens::ChainId(n_gram)).unwrap();
-                    let mut dist: &mut tokens::TokenDist = &mut tokens::TokenDist::Empty;
+                    let mut dist: &mut tokens::TokenDist;
 
                     // First window is special
                     if n_gram != 0 {
                         if let Some(i_window) = window_iterator.next() {
                             window = i_window;
-                            chain.entry(token_start).or_default().increment(bag.s2i(window.first().unwrap()));
+
+                            let mut p_window = i_window.to_vec();
+
+                            // Token Start
+                            chain.entry(token_start).or_default().increment(next_tokens[*p_window.first().unwrap() as usize]);
+
+                            while p_window.iter().any(|&x| x != PREFILL_CT) {
+                                // Splowly replace the window with
+                                // prefill from left to right
+                                // pushint the right out of frame
+                                p_window.rotate_right(1);
+                                p_window[0] = PREFILL_CT;
+
+                                if let Some((next_t, prefix_t)) = p_window.split_last() {
+                                    dist = chain.entry(bag.s2i(prefix_t)).or_default();
+                                    dist.increment(next_tokens[*next_t as usize]);
+                                }
+                            }
 
                             // Normal window proc
                             if let Some((next_t, prefix_t)) = window.split_last() {
-                                let prefix_key = bag.s2i(prefix_t);
-                                dist = chain.entry(prefix_key).or_default();
-                                dist.increment(bag.s2i(tokens::TokenValue::Next(*next_t)));
+                                dist = chain.entry(bag.s2i(prefix_t)).or_default();
+                                dist.increment(next_tokens[*next_t as usize]);
                             }
                         }
                     }
@@ -64,12 +84,13 @@ fn train_chains_from_files(bag: &mut wordbag::WordBag, chains: &mut tokens::Toke
                         if let Some((next_t, prefix_t)) = window.split_last() {
                             let prefix_key = if n_gram == 0 { token_zero_gram } else { bag.s2i(prefix_t) };
                             dist = chain.entry(prefix_key).or_default();
-                            dist.increment(bag.s2i(tokens::TokenValue::Next(*next_t)));
+                            dist.increment(next_tokens[*next_t as usize]);
                         }
                     }
 
                     // Last window is also special
-                    if n_gram != 0 {
+                    if n_gram != 0 && window.len() > 0 {
+                        dist = chain.entry(bag.s2i(&window[1..])).or_default();
                         dist.increment(bag.s2i(tokens::SpecialToken::End));
                     }
                 }
@@ -79,9 +100,9 @@ fn train_chains_from_files(bag: &mut wordbag::WordBag, chains: &mut tokens::Toke
     }
 }
 
-fn sample_chains(bag: &mut wordbag::WordBag, chains: &mut tokens::TokenChains) {
+fn sample_chains_backoff(bag: &mut wordbag::WordBag, chains: &mut tokens::TokenChains) {
     let mut rng: rand::rngs::SmallRng = rand::make_rng();
-    let mut prefix_t: [u8; CTX_LEN] = [0; CTX_LEN];
+    let mut prefix_t: [u8; CTX_LEN] = [PREFILL_CT; CTX_LEN];
     let mut output: Vec<u8> = Vec::with_capacity(SAMPLE_SEQ);
 
     let token_zero_gram = bag.s2i(tokens::SpecialToken::ZeroGram);
@@ -90,10 +111,14 @@ fn sample_chains(bag: &mut wordbag::WordBag, chains: &mut tokens::TokenChains) {
     println!("sample_chains:");
     'sample: for _ in (0..SAMPLE_SEQ).progress() {
         'n_gram_iter: for n_gram in (0..=CTX_LEN).rev() {
+            // interesting test for later:
+            // if n_gram.is_power_of_two() && 0 < n_gram && n_gram < CTX_LEN {
+            //     continue 'n_gram_iter;
+            // };
             let this_prefix_t: tokens::TokenId;
             if n_gram == 0 {
                 this_prefix_t = token_zero_gram;
-            } else if prefix_t.iter().all(|&x| x == 0) {
+            } else if prefix_t.iter().all(|&x| x == PREFILL_CT) {
                 this_prefix_t = token_start;
             } else {
                 match bag.get_id(prefix_t.get((CTX_LEN - n_gram)..).unwrap()) {
@@ -130,15 +155,25 @@ fn sample_chains(bag: &mut wordbag::WordBag, chains: &mut tokens::TokenChains) {
                         None => unreachable!(),
                     }
                 }
-                None => unreachable!(),
+                None => {
+                    println!("Fuck.");
+
+                    dbg!(n_gram);
+                    dbg!(this_prefix_t);
+                    dbg!(bag.i2s(this_prefix_t).unwrap());
+                    dbg!(io::decode_chopped_utf8(&bag.i2s(this_prefix_t).unwrap().as_bytes()));
+
+                    panic!("We shouldn't have got here!!! #1")
+                }
             }
         }
     }
 
     println!();
-    println!("SAMPLED:\t\t{:?}", io::decode_chopped_utf8(&output));
-    println!("SAMPLED RAW:\t\t{:?}", &output);
-    println!("PREFIX BUFFER STATE:\t{:?}", &prefix_t);
+    println!("SAMPLED:\n---\n\n{:}\n\n----\n", io::decode_chopped_utf8(&output));
+    // println!("SAMPLED RAW:\t\t{:?}", &output);
+    println!("PREFIX BUFFER STATE: {:?}", &prefix_t);
+    println!("PREFIX BUFFER STATE (READABLE): {:?}", io::decode_chopped_utf8(&prefix_t));
     println!();
 }
 
@@ -146,7 +181,8 @@ fn main() {
     tests::run();
 
     let mut test_files: Vec<std::path::PathBuf> = Vec::new();
-    test_files.append(&mut glob("**/*.rs").ok().into_iter().flatten().filter_map(Result::ok).collect());
+
+    test_files.append(&mut glob("src/*.rs").ok().into_iter().flatten().filter_map(Result::ok).collect());
 
     // init
     let mut chains: tokens::TokenChains = tokens::TokenChains::new();
@@ -159,11 +195,10 @@ fn main() {
     }
 
     let mut bag = wordbag::WordBag::with_capacity((u8::MAX as usize) * 5);
-
     bag.setup_special_tokens();
 
     train_wordbag_from_files(&mut bag, &test_files);
     train_chains_from_files(&mut bag, &mut chains, &test_files);
 
-    sample_chains(&mut bag, &mut chains);
+    sample_chains_backoff(&mut bag, &mut chains);
 }
