@@ -21,7 +21,7 @@ zzz = "0.3.2"
 # sysinfo = "0.40.4"
 
 [features]
-experiment-n_gram_skips = []
+experiment-n_gram-skips = []
 
 [profile.profiling]
 inherits = "release"
