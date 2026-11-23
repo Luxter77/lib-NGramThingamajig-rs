@@ -20,6 +20,9 @@ zzz = "0.3.2"
 # serde_json = "1.0.154"
 # sysinfo = "0.40.4"
 
+[features]
+experiment-n_gram_skips = []
+
 [profile.profiling]
 inherits = "release"
 debug = true

@@ -21,14 +21,15 @@ fn train_chains_from_files(bag: &mut wordbag::WordBag, chains: &mut tokens::Toke
         match file_reader {
             Ok(file_reader) => {
                 'n_gram_iter: for n_gram in 0..=CTX_LEN {
-                    if file_reader.len() < n_gram + 1 {
-                        continue 'n_gram_iter;
-                    };
-
                     #[cfg(feature = "experiment-n_gram-skips")]
                     if !n_gram.is_power_of_two() && 1 < n_gram && n_gram < CTX_LEN {
                         continue 'n_gram_iter;
                     };
+                    
+                    if file_reader.len() < n_gram + 1 {
+                        continue 'n_gram_iter;
+                    };
+
 
                     let mut window_iterator = io::sliding_window_reader(&file_reader, n_gram + 1);
                     let mut window: &[u8] = &[];
@@ -104,6 +105,7 @@ fn sample_chains_backoff(bag: &mut wordbag::WordBag, chains: &mut tokens::TokenC
             if !n_gram.is_power_of_two() && 1 < n_gram && n_gram < CTX_LEN {
                 continue 'n_gram_iter;
             };
+            
             let this_prefix_t: tokens::TokenId;
             if n_gram == 0 {
                 this_prefix_t = token_zero_gram;
