@@ -116,7 +116,9 @@ fn sample_chains_backoff(bag: &mut wordbag::WordBag, chains: &mut tokens::TokenC
                 }
             };
             let chain = chains.get(&tokens::ChainId(n_gram)).unwrap();
-            if chain.is_empty() { continue 'n_gram_iter };
+            if chain.is_empty() {
+                continue 'n_gram_iter;
+            };
             match chain.get(&this_prefix_t) {
                 Some(dist) => {
                     match tests::sample(dist, &mut rng) {

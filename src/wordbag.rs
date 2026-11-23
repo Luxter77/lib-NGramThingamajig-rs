@@ -201,7 +201,8 @@ impl<S: BuildHasher> WordBag<S> {
         println!("train_wordbag_from_files:");
 
         'n_gram_iter: for n_gram in 1..=ctx_len {
-            #[cfg(feature = "experiment-n_gram-skips")]#[cfg(feature = "experiment-n_gram-skips")]
+            #[cfg(feature = "experiment-n_gram-skips")]
+            #[cfg(feature = "experiment-n_gram-skips")]
             if !n_gram.is_power_of_two() && 1 < n_gram && n_gram < ctx_len {
                 continue 'n_gram_iter;
             };
