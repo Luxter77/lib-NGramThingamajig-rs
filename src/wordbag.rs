@@ -3,6 +3,7 @@ use std::hash::{BuildHasher, Hash, Hasher};
 use ahash::RandomState;
 use indexmap::{Equivalent, IndexSet};
 
+use crate::io::{get_file_readers, sliding_window_reader};
 use crate::tokens::{SpecialToken, TokenId, TokenValue};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -159,9 +160,7 @@ impl<S: BuildHasher> WordBag<S> {
     }
 
     pub fn with_capacity_and_hasher(capacity: usize, hasher: S) -> Self {
-        Self {
-            tokens: IndexSet::with_capacity_and_hasher(capacity, hasher),
-        }
+        Self { tokens: IndexSet::with_capacity_and_hasher(capacity, hasher) }
     }
 
     pub fn len(&self) -> usize {
@@ -178,9 +177,7 @@ impl<S: BuildHasher> WordBag<S> {
     }
 
     pub fn get_id<T: TokenInput>(&self, s_token: T) -> Option<TokenId> {
-        self.tokens
-            .get_index_of(&s_token.as_token_ref())
-            .map(|idx| TokenId(idx as u64))
+        self.tokens.get_index_of(&s_token.as_token_ref()).map(|idx| TokenId(idx as u64))
     }
 
     pub fn s2i<T: TokenInput>(&mut self, s_token: T) -> TokenId {
@@ -198,5 +195,28 @@ impl<S: BuildHasher> WordBag<S> {
 
     pub fn values(&self) -> impl ExactSizeIterator<Item = &TokenValue> {
         self.tokens.iter()
+    }
+
+    pub fn train_from_files(&mut self, files: &Vec<std::path::PathBuf>, ctx_len: usize) {
+        println!("train_wordbag_from_files:");
+
+        'n_gram_iter: for n_gram in 1..=ctx_len {
+            if !n_gram.is_power_of_two() && 1 < n_gram && n_gram < ctx_len {
+                continue 'n_gram_iter;
+            };
+            for file_reader in get_file_readers(files) {
+                match file_reader {
+                    Ok(file_reader) => {
+                        if file_reader.len() < n_gram {
+                            continue 'n_gram_iter;
+                        };
+                        for window in sliding_window_reader(&file_reader, n_gram) {
+                            self.s2i(window);
+                        }
+                    }
+                    Err(_) => unreachable!(),
+                }
+            }
+        }
     }
 }

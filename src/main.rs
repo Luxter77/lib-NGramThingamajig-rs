@@ -3,32 +3,12 @@ mod tests;
 mod tokens;
 mod wordbag;
 
-use std::collections::HashMap;
-
-use ahash::RandomState;
-use glob::glob;
 use zzz::ProgressBarIterExt as _;
 
-const CTX_LEN: usize = 15;
-const SAMPLE_SEQ: usize = 5000;
+const CTX_LEN: usize = 24;
+const SAMPLE_SEQ: usize = 2000;
 const PREFILL_CT: u8 = 0;
-
-fn train_wordbag_from_files(bag: &mut wordbag::WordBag, files: &Vec<std::path::PathBuf>) {
-    println!("train_wordbag_from_files:");
-
-    for n_gram in (1..=CTX_LEN).progress() {
-        for file_reader in io::get_file_readers(files) {
-            match file_reader {
-                Ok(file_reader) => {
-                    for window in io::sliding_window_reader(&file_reader, n_gram) {
-                        bag.s2i(window);
-                    }
-                }
-                Err(_) => unreachable!(),
-            }
-        }
-    }
-}
+const NUM_SAMPLES: usize = 10;
 
 fn train_chains_from_files(bag: &mut wordbag::WordBag, chains: &mut tokens::TokenChains, files: &Vec<std::path::PathBuf>) {
     let token_zero_gram = bag.s2i(tokens::SpecialToken::ZeroGram);
@@ -40,7 +20,15 @@ fn train_chains_from_files(bag: &mut wordbag::WordBag, chains: &mut tokens::Toke
     for file_reader in io::get_file_readers(files).progress() {
         match file_reader {
             Ok(file_reader) => {
-                for n_gram in 0..=CTX_LEN {
+                'n_gram_iter: for n_gram in 0..=CTX_LEN {
+                    if file_reader.len() < n_gram + 1 {
+                        continue 'n_gram_iter;
+                    };
+                    // Experiment for later:
+                    // if !n_gram.is_power_of_two() && 1 < n_gram && n_gram < CTX_LEN {
+                    //     continue 'n_gram_iter;
+                    // };
+
                     let mut window_iterator = io::sliding_window_reader(&file_reader, n_gram + 1);
                     let mut window: &[u8] = &[];
 
@@ -112,7 +100,7 @@ fn sample_chains_backoff(bag: &mut wordbag::WordBag, chains: &mut tokens::TokenC
     'sample: for _ in (0..SAMPLE_SEQ).progress() {
         'n_gram_iter: for n_gram in (0..=CTX_LEN).rev() {
             // interesting test for later:
-            // if n_gram.is_power_of_two() && 0 < n_gram && n_gram < CTX_LEN {
+            // if !n_gram.is_power_of_two() && 1 < n_gram && n_gram < CTX_LEN {
             //     continue 'n_gram_iter;
             // };
             let this_prefix_t: tokens::TokenId;
@@ -177,28 +165,37 @@ fn sample_chains_backoff(bag: &mut wordbag::WordBag, chains: &mut tokens::TokenC
     println!();
 }
 
+fn helper_add_to_vec(globs_s: &[&'static str]) -> Vec<std::path::PathBuf> {
+    let mut f_list: Vec<std::path::PathBuf> = Vec::new();
+    for &glob_s in globs_s {
+        f_list.append(&mut glob::glob(glob_s).ok().into_iter().flatten().filter_map(Result::ok).collect());
+    }
+    f_list
+}
+
 fn main() {
     tests::run();
 
-    let mut test_files: Vec<std::path::PathBuf> = Vec::new();
-
-    test_files.append(&mut glob("src/*.rs").ok().into_iter().flatten().filter_map(Result::ok).collect());
+    let test_files = helper_add_to_vec(&["src/**.rs"]);
 
     // init
     let mut chains: tokens::TokenChains = tokens::TokenChains::new();
 
-    chains.insert(tokens::ChainId(0), HashMap::with_capacity_and_hasher(1, RandomState::new()));
-    chains.insert(tokens::ChainId(1), HashMap::with_capacity_and_hasher(u8::MAX as usize, RandomState::new()));
+    chains.insert(tokens::ChainId(0), std::collections::HashMap::with_capacity_and_hasher(1, ahash::RandomState::new()));
+    chains.insert(tokens::ChainId(1), std::collections::HashMap::with_capacity_and_hasher(u8::MAX as usize, ahash::RandomState::new()));
 
     for n_gram in 2..=CTX_LEN {
-        chains.insert(tokens::ChainId(n_gram), HashMap::with_hasher(RandomState::new()));
+        chains.insert(tokens::ChainId(n_gram), std::collections::HashMap::with_hasher(ahash::RandomState::new()));
     }
 
     let mut bag = wordbag::WordBag::with_capacity((u8::MAX as usize) * 5);
     bag.setup_special_tokens();
 
-    train_wordbag_from_files(&mut bag, &test_files);
+    bag.train_from_files(&test_files, CTX_LEN);
+
     train_chains_from_files(&mut bag, &mut chains, &test_files);
 
-    sample_chains_backoff(&mut bag, &mut chains);
+    for _ in 0..NUM_SAMPLES {
+        sample_chains_backoff(&mut bag, &mut chains);
+    }
 }

@@ -3,9 +3,7 @@ use rand::{RngExt, SeedableRng};
 
 use ahash::RandomState;
 
-use crate::tokens::{
-    ChainId, SpecialToken, TokenChain, TokenChains, TokenCount, TokenDist, TokenId, TokenValue,
-};
+use crate::tokens::{ChainId, SpecialToken, TokenChain, TokenChains, TokenCount, TokenDist, TokenId, TokenValue};
 use crate::wordbag::{TokenInput, TokenRef, WordBag};
 
 const PARAGRAPH: &str = "the quick brown fox jumps over the lazy dog. \
@@ -15,10 +13,7 @@ the lazy dog sleeps while the quick fox jumps.";
 const WINDOW: usize = 3;
 
 pub fn run() {
-    println!(
-        "Size of Message: {} bytes",
-        std::mem::size_of::<TokenValue>()
-    );
+    println!("Size of Message: {} bytes", std::mem::size_of::<TokenValue>());
     // You can also check it at compile time:
     const SIZE: usize = std::mem::size_of::<TokenValue>();
     assert_eq!(SIZE, 24); // Rust uses niche optimization on String's pointer!
@@ -36,19 +31,14 @@ pub fn run() {
     println!("paragraph: {} bytes", PARAGRAPH.len());
     println!("window: {WINDOW} bytes, {} windows", windows.len());
     println!("vocabulary: {} tokens", wordbag.len());
-    println!(
-        "start={start:?} end={end:?} zero_gram={zero_gram:?} word_list_start={word_list_start:?}"
-    );
+    println!("start={start:?} end={end:?} zero_gram={zero_gram:?} word_list_start={word_list_start:?}");
 
     assert_eq!(ids.len(), PARAGRAPH.len() - WINDOW + 1);
     assert!(!wordbag.is_empty());
 
     let mut chain: TokenChain = TokenChain::with_hasher(RandomState::new());
     for pair in ids.windows(2) {
-        chain
-            .entry(pair[0])
-            .or_insert_with(|| TokenDist::with_capacity(2))
-            .increment(pair[1]);
+        chain.entry(pair[0]).or_insert_with(|| TokenDist::with_capacity(2)).increment(pair[1]);
     }
 
     let mut chains = TokenChains::new();
@@ -65,20 +55,12 @@ pub fn run() {
     ranked.sort_by_key(|(token, dist)| (std::cmp::Reverse(total(dist)), token.0));
 
     for (token, dist) in ranked.iter().take(8) {
-        println!(
-            "{:?} -> {}",
-            text_of(**token, &wordbag),
-            render_dist(dist, &wordbag)
-        );
+        println!("{:?} -> {}", text_of(**token, &wordbag), render_dist(dist, &wordbag));
     }
 
     for (chain_id, step) in chains.iter().take(3) {
         for (token, dist) in step {
-            println!(
-                "{chain_id:?} {:?} -> {}",
-                text_of(*token, &wordbag),
-                render_dist(dist, &wordbag)
-            );
+            println!("{chain_id:?} {:?} -> {}", text_of(*token, &wordbag), render_dist(dist, &wordbag));
         }
     }
 
@@ -89,25 +71,15 @@ pub fn run() {
 
     let token_ref = TokenRef::Normal(first_window);
     assert_eq!(wordbag.get_id(token_ref), Some(first_id));
-    assert_eq!(
-        token_ref.into_token_value(),
-        TokenValue::Normal(first_window.to_vec())
-    );
-    assert_eq!(
-        TokenValue::Special(SpecialToken::End).as_token_ref(),
-        TokenRef::Special(SpecialToken::End)
-    );
+    assert_eq!(token_ref.into_token_value(), TokenValue::Normal(first_window.to_vec()));
+    assert_eq!(TokenValue::Special(SpecialToken::End).as_token_ref(), TokenRef::Special(SpecialToken::End));
 
     let ids_from_keys: Vec<TokenId> = wordbag.keys().collect();
     assert_eq!(ids_from_keys.len(), wordbag.len());
 
     for id in ids_from_keys.iter().take(10) {
         let value = wordbag.i2s(*id).expect("id must resolve");
-        println!(
-            "{id:?} -> {:?} ({})",
-            value,
-            String::from_utf8_lossy(value.as_bytes())
-        );
+        println!("{id:?} -> {:?} ({})", value, String::from_utf8_lossy(value.as_bytes()));
     }
 
     for value in wordbag.values().take(10) {
@@ -133,13 +105,8 @@ pub fn run() {
     assert_eq!(generated.first(), Some(&seed));
     assert!(generated.len() <= 41);
     for pair in generated.windows(2) {
-        let dist = chain
-            .get(&pair[0])
-            .expect("generated token must be in the chain");
-        assert!(
-            count_of(dist, pair[1]) > 0,
-            "transition must exist in the chain"
-        );
+        let dist = chain.get(&pair[0]).expect("generated token must be in the chain");
+        assert!(count_of(dist, pair[1]) > 0, "transition must exist in the chain");
     }
 }
 
@@ -201,10 +168,7 @@ fn render_text(ids: &[TokenId], wordbag: &WordBag) -> String {
 }
 
 fn text_of(id: TokenId, wordbag: &WordBag) -> String {
-    wordbag
-        .i2s(id)
-        .map(|value| String::from_utf8_lossy(value.as_bytes()).into_owned())
-        .unwrap_or_else(|| format!("{id:?}"))
+    wordbag.i2s(id).map(|value| String::from_utf8_lossy(value.as_bytes()).into_owned()).unwrap_or_else(|| format!("{id:?}"))
 }
 
 fn render_dist(dist: &TokenDist, wordbag: &WordBag) -> String {
@@ -212,10 +176,7 @@ fn render_dist(dist: &TokenDist, wordbag: &WordBag) -> String {
         TokenDist::Empty => String::from("(empty)"),
         TokenDist::Single(id, count) => format!("{:?} x{}", text_of(*id, wordbag), count.0),
         TokenDist::Many(map) => {
-            let mut parts: Vec<String> = map
-                .iter()
-                .map(|(id, count)| format!("{:?} x{}", text_of(*id, wordbag), count.0))
-                .collect();
+            let mut parts: Vec<String> = map.iter().map(|(id, count)| format!("{:?} x{}", text_of(*id, wordbag), count.0)).collect();
             parts.sort();
             parts.join(", ")
         }
@@ -241,11 +202,7 @@ fn count_of(dist: &TokenDist, token: TokenId) -> u64 {
 #[cfg(test)]
 fn build_chain(paragraph: &str, window: usize) -> (WordBag, TokenChain) {
     let mut wordbag = WordBag::new();
-    let ids: Vec<TokenId> = paragraph
-        .as_bytes()
-        .windows(window)
-        .map(|window| wordbag.s2i(window))
-        .collect();
+    let ids: Vec<TokenId> = paragraph.as_bytes().windows(window).map(|window| wordbag.s2i(window)).collect();
 
     let mut chain: TokenChain = TokenChain::with_hasher(RandomState::new());
     for pair in ids.windows(2) {
@@ -266,19 +223,11 @@ mod unit {
 
     #[test]
     fn special_tokens_have_distinct_bytes() {
-        let tokens = [
-            SpecialToken::Start,
-            SpecialToken::End,
-            SpecialToken::ZeroGram,
-            SpecialToken::WordListStart,
-        ];
+        let tokens = [SpecialToken::Start, SpecialToken::End, SpecialToken::ZeroGram, SpecialToken::WordListStart];
 
         let mut seen = std::collections::HashSet::new();
         for token in tokens {
-            assert!(
-                seen.insert(token.as_bytes()),
-                "duplicate bytes for {token:?}"
-            );
+            assert!(seen.insert(token.as_bytes()), "duplicate bytes for {token:?}");
         }
         assert_eq!(seen.len(), tokens.len());
     }
@@ -304,25 +253,15 @@ mod unit {
         let normal = wordbag.s2i(SpecialToken::Start.as_bytes());
 
         assert_ne!(special, normal);
-        assert_eq!(
-            wordbag.get_id(TokenRef::Special(SpecialToken::Start)),
-            Some(special)
-        );
-        assert_eq!(
-            wordbag.get_id(TokenRef::Normal(SpecialToken::Start.as_bytes())),
-            Some(normal)
-        );
+        assert_eq!(wordbag.get_id(TokenRef::Special(SpecialToken::Start)), Some(special));
+        assert_eq!(wordbag.get_id(TokenRef::Normal(SpecialToken::Start.as_bytes())), Some(normal));
     }
 
     #[test]
     fn i2s_roundtrips_every_id() {
         let mut wordbag = WordBag::new();
 
-        let ids = [
-            wordbag.s2i(SpecialToken::Start),
-            wordbag.s2i(b"alpha".as_slice()),
-            wordbag.s2i(b"beta".as_slice()),
-        ];
+        let ids = [wordbag.s2i(SpecialToken::Start), wordbag.s2i(b"alpha".as_slice()), wordbag.s2i(b"beta".as_slice())];
 
         for id in ids {
             assert!(wordbag.i2s(id).is_some());
@@ -359,18 +298,9 @@ mod unit {
     fn token_input_conversions_preserve_value() {
         let bytes: &[u8] = b"abc";
 
-        assert_eq!(
-            bytes.into_token_value(),
-            TokenValue::Normal(b"abc".to_vec())
-        );
-        assert_eq!(
-            b"abc".into_token_value(),
-            TokenValue::Normal(b"abc".to_vec())
-        );
-        assert_eq!(
-            SpecialToken::End.into_token_value(),
-            TokenValue::Special(SpecialToken::End)
-        );
+        assert_eq!(bytes.into_token_value(), TokenValue::Normal(b"abc".to_vec()));
+        assert_eq!(b"abc".into_token_value(), TokenValue::Normal(b"abc".to_vec()));
+        assert_eq!(SpecialToken::End.into_token_value(), TokenValue::Special(SpecialToken::End));
 
         let value = TokenValue::Normal(b"abc".to_vec());
         assert_eq!((&value).into_token_value(), value);
@@ -436,11 +366,7 @@ mod unit {
     #[test]
     fn sliding_window_chain_records_every_transition() {
         let mut wordbag = WordBag::new();
-        let ids: Vec<TokenId> = PARAGRAPH
-            .as_bytes()
-            .windows(WINDOW)
-            .map(|window| wordbag.s2i(window))
-            .collect();
+        let ids: Vec<TokenId> = PARAGRAPH.as_bytes().windows(WINDOW).map(|window| wordbag.s2i(window)).collect();
 
         let mut chain: TokenChain = TokenChain::with_hasher(RandomState::new());
         for pair in ids.windows(2) {
@@ -451,9 +377,7 @@ mod unit {
         assert_eq!(transitions as usize, ids.len() - 1);
 
         for pair in ids.windows(2) {
-            let dist = chain
-                .get(&pair[0])
-                .expect("source window must be in the chain");
+            let dist = chain.get(&pair[0]).expect("source window must be in the chain");
             assert!(count_of(dist, pair[1]) > 0);
         }
     }
@@ -466,10 +390,7 @@ mod unit {
         for dist in chain.values() {
             for _ in 0..20 {
                 let picked = sample(dist, &mut rng).expect("non-empty distribution must sample");
-                assert!(
-                    count_of(dist, picked) > 0,
-                    "sample must come from the distribution"
-                );
+                assert!(count_of(dist, picked) > 0, "sample must come from the distribution");
             }
         }
     }
@@ -491,9 +412,7 @@ mod unit {
         assert_eq!(generated.first(), Some(&seed));
         assert!(generated.len() > 1);
         for pair in generated.windows(2) {
-            let dist = chain
-                .get(&pair[0])
-                .expect("generated token must be in the chain");
+            let dist = chain.get(&pair[0]).expect("generated token must be in the chain");
             assert!(count_of(dist, pair[1]) > 0);
         }
     }
@@ -506,12 +425,8 @@ mod unit {
 
             for (source, dist) in &chain {
                 for _ in 0..20 {
-                    let picked =
-                        sample(dist, &mut rng).expect("non-empty distribution must sample");
-                    assert!(
-                        count_of(dist, picked) > 0,
-                        "order {window} source {source:?} sampled {picked:?} outside its distribution"
-                    );
+                    let picked = sample(dist, &mut rng).expect("non-empty distribution must sample");
+                    assert!(count_of(dist, picked) > 0, "order {window} source {source:?} sampled {picked:?} outside its distribution");
                 }
             }
         }
@@ -525,10 +440,7 @@ mod unit {
         for dist in chain.values() {
             for _ in 0..20 {
                 let picked = sample(dist, &mut rng).expect("non-empty distribution must sample");
-                assert!(
-                    wordbag.i2s(picked).is_some(),
-                    "order {WINDOW} sampled {picked:?} outside the vocabulary"
-                );
+                assert!(wordbag.i2s(picked).is_some(), "order {WINDOW} sampled {picked:?} outside the vocabulary");
             }
         }
     }

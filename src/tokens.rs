@@ -44,15 +44,11 @@ impl TokenDist {
     }
 
     pub fn with_capacity(capacity: usize) -> Self {
-        if capacity <= 1 {
-            TokenDist::Empty
-        } else {
-            TokenDist::Many(Box::new(HashMap::with_capacity_and_hasher(capacity, RandomState::new())))
-        }
+        if capacity <= 1 { TokenDist::Empty } else { TokenDist::Many(Box::new(HashMap::with_capacity_and_hasher(capacity, RandomState::new()))) }
     }
 }
 
-pub type TokenChain  = HashMap<TokenId,  TokenDist, RandomState>;
+pub type TokenChain = HashMap<TokenId, TokenDist, RandomState>;
 pub type TokenChains = BTreeMap<ChainId, TokenChain>;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -67,7 +63,7 @@ pub enum SpecialToken {
 pub enum TokenValue {
     Special(SpecialToken),
     Normal(Vec<u8>),
-    Next(u8)
+    Next(u8),
 }
 
 impl Hash for TokenValue {
