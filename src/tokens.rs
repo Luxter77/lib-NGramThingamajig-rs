@@ -79,7 +79,7 @@ impl Hash for TokenValue {
             }
             TokenValue::Next(byte) => {
                 2u8.hash(state);
-                std::slice::from_ref(byte).hash(state);
+                byte.hash(state);
             }
         }
     }

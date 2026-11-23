@@ -3,86 +3,94 @@ mod tests;
 mod tokens;
 mod wordbag;
 
+// use rayon::iter::{IntoParallelRefMutIterator, ParallelIterator};
 use zzz::ProgressBarIterExt as _;
 
-const CTX_LEN: usize = 24;
+const CTX_LEN: usize = 15;
 const SAMPLE_SEQ: usize = 2000;
 const PREFILL_CT: u8 = 0;
 const NUM_SAMPLES: usize = 10;
 
-fn train_chains_from_files(bag: &mut wordbag::WordBag, chains: &mut tokens::TokenChains, files: &Vec<std::path::PathBuf>) {
-    let token_zero_gram = bag.s2i(tokens::SpecialToken::ZeroGram);
-    let token_start = bag.s2i(tokens::SpecialToken::Start);
+#[cfg(feature = "chain_zero")]
+const CHAINS_START: usize = 0;
+#[cfg(not(feature = "chain_zero"))]
+const CHAINS_START: usize = 1;
 
-    let next_tokens: [tokens::TokenId; u8::MAX as usize + 1] = std::array::from_fn(|i| bag.s2i(tokens::TokenValue::Next(i as u8)));
+fn train_chain_ngram(
+    chain: &mut tokens::TokenChain,
+    bag: &wordbag::WordBag,
+    n_gram: usize,
+    next_tokens: [tokens::TokenId; u8::MAX as usize + 1],
+    file_reader: &memmap2::Mmap,
+) {
+    let mut window_iterator = io::sliding_window_reader(file_reader, n_gram + 1);
+    let mut dist: &mut tokens::TokenDist;
+    let mut window: &[u8] = &[];
+
+    let token_start = bag.get_id(tokens::SpecialToken::Start).unwrap();
+    let token_zero_gram = bag.get_id(tokens::SpecialToken::ZeroGram).unwrap();
+
+    // First window is special
+    if n_gram != 0 {
+        if let Some(i_window) = window_iterator.next() {
+            window = i_window;
+
+            let mut p_window = i_window.to_vec();
+
+            // Token Start
+            chain.entry(token_start).or_default().increment(next_tokens[*p_window.first().unwrap() as usize]);
+
+            while p_window.iter().any(|&x| x != PREFILL_CT) {
+                // Splowly replace the window with
+                // prefill from left to right
+                // pushint the right out of frame
+                p_window.rotate_right(1);
+                p_window[0] = PREFILL_CT;
+
+                if let Some((next_t, prefix_t)) = p_window.split_last() {
+                    dist = chain.entry(bag.get_id(prefix_t).unwrap()).or_default();
+                    dist.increment(next_tokens[*next_t as usize]);
+                }
+            }
+
+            // Normal window proc
+            if let Some((next_t, prefix_t)) = window.split_last() {
+                dist = chain.entry(bag.get_id(prefix_t).unwrap()).or_default();
+                dist.increment(next_tokens[*next_t as usize]);
+            }
+        }
+    }
+
+    // Rest of the windows
+    for i_window in window_iterator {
+        window = i_window;
+        if let Some((next_t, prefix_t)) = window.split_last() {
+            let prefix_key = if n_gram == 0 { token_zero_gram } else { bag.get_id(prefix_t).unwrap() };
+            dist = chain.entry(prefix_key).or_default();
+            dist.increment(next_tokens[*next_t as usize]);
+        }
+    }
+
+    // Last window is also special
+    if n_gram != 0 && window.len() > 0 {
+        dist = chain.entry(bag.get_id(&window[1..]).unwrap()).or_default();
+        dist.increment(bag.get_id(tokens::SpecialToken::End).unwrap());
+    }
+}
+
+fn train_chains_from_files(bag: &wordbag::WordBag, chains: &mut tokens::TokenChains, files: &Vec<std::path::PathBuf>) {
+    let next_tokens: [tokens::TokenId; u8::MAX as usize + 1] = std::array::from_fn(|i| bag.get_id(tokens::TokenValue::Next(i as u8)).unwrap());
 
     println!("train_chains_from_files:");
     for file_reader in io::get_file_readers(files).progress() {
         match file_reader {
             Ok(file_reader) => {
-                'n_gram_iter: for n_gram in 0..=CTX_LEN {
-                    #[cfg(feature = "experiment-n_gram-skips")]
-                    if !n_gram.is_power_of_two() && 1 < n_gram && n_gram < CTX_LEN {
-                        continue 'n_gram_iter;
-                    };
-                    
-                    if file_reader.len() < n_gram + 1 {
-                        continue 'n_gram_iter;
-                    };
+                let n_gram_iter = (CHAINS_START..=CTX_LEN).filter(|&n_gram| file_reader.len() >= n_gram + 1);
+                #[cfg(feature = "experiment-n_gram-skips")]
+                let n_gram_iter = n_gram_iter.filter(|&n_gram| n_gram.is_power_of_two() || n_gram <= 1 || n_gram >= CTX_LEN);
 
-
-                    let mut window_iterator = io::sliding_window_reader(&file_reader, n_gram + 1);
-                    let mut window: &[u8] = &[];
-
-                    let chain: &mut tokens::TokenChain = chains.get_mut(&tokens::ChainId(n_gram)).unwrap();
-                    let mut dist: &mut tokens::TokenDist;
-
-                    // First window is special
-                    if n_gram != 0 {
-                        if let Some(i_window) = window_iterator.next() {
-                            window = i_window;
-
-                            let mut p_window = i_window.to_vec();
-
-                            // Token Start
-                            chain.entry(token_start).or_default().increment(next_tokens[*p_window.first().unwrap() as usize]);
-
-                            while p_window.iter().any(|&x| x != PREFILL_CT) {
-                                // Splowly replace the window with
-                                // prefill from left to right
-                                // pushint the right out of frame
-                                p_window.rotate_right(1);
-                                p_window[0] = PREFILL_CT;
-
-                                if let Some((next_t, prefix_t)) = p_window.split_last() {
-                                    dist = chain.entry(bag.s2i(prefix_t)).or_default();
-                                    dist.increment(next_tokens[*next_t as usize]);
-                                }
-                            }
-
-                            // Normal window proc
-                            if let Some((next_t, prefix_t)) = window.split_last() {
-                                dist = chain.entry(bag.s2i(prefix_t)).or_default();
-                                dist.increment(next_tokens[*next_t as usize]);
-                            }
-                        }
-                    }
-
-                    // Rest of the windows
-                    for i_window in window_iterator {
-                        window = i_window;
-                        if let Some((next_t, prefix_t)) = window.split_last() {
-                            let prefix_key = if n_gram == 0 { token_zero_gram } else { bag.s2i(prefix_t) };
-                            dist = chain.entry(prefix_key).or_default();
-                            dist.increment(next_tokens[*next_t as usize]);
-                        }
-                    }
-
-                    // Last window is also special
-                    if n_gram != 0 && window.len() > 0 {
-                        dist = chain.entry(bag.s2i(&window[1..])).or_default();
-                        dist.increment(bag.s2i(tokens::SpecialToken::End));
-                    }
+                for n_gram in n_gram_iter {
+                    train_chain_ngram(chains.get_mut(&tokens::ChainId(n_gram)).unwrap(), &bag, n_gram, next_tokens, &file_reader);
                 }
             }
             Err(_) => unreachable!(),
@@ -90,22 +98,22 @@ fn train_chains_from_files(bag: &mut wordbag::WordBag, chains: &mut tokens::Toke
     }
 }
 
-fn sample_chains_backoff(bag: &mut wordbag::WordBag, chains: &mut tokens::TokenChains) {
+fn sample_chains_backoff(bag: &wordbag::WordBag, chains: &tokens::TokenChains) {
     let mut rng: rand::rngs::SmallRng = rand::make_rng();
     let mut prefix_t: [u8; CTX_LEN] = [PREFILL_CT; CTX_LEN];
     let mut output: Vec<u8> = Vec::with_capacity(SAMPLE_SEQ);
 
-    let token_zero_gram = bag.s2i(tokens::SpecialToken::ZeroGram);
-    let token_start = bag.s2i(tokens::SpecialToken::Start);
+    let token_zero_gram = bag.get_id(tokens::SpecialToken::ZeroGram).unwrap();
+    let token_start = bag.get_id(tokens::SpecialToken::Start).unwrap();
 
     println!("sample_chains:");
     'sample: for _ in (0..SAMPLE_SEQ).progress() {
-        'n_gram_iter: for n_gram in (0..=CTX_LEN).rev() {
+        'n_gram_iter: for n_gram in (CHAINS_START..=CTX_LEN).rev() {
             #[cfg(feature = "experiment-n_gram-skips")]
             if !n_gram.is_power_of_two() && 1 < n_gram && n_gram < CTX_LEN {
                 continue 'n_gram_iter;
             };
-            
+
             let this_prefix_t: tokens::TokenId;
             if n_gram == 0 {
                 this_prefix_t = token_zero_gram;
@@ -183,12 +191,14 @@ fn helper_add_to_vec(globs_s: &[&'static str]) -> Vec<std::path::PathBuf> {
 fn main() {
     tests::run();
 
-    let test_files = helper_add_to_vec(&["src/*.rs"]); // this wont find anything!
+    let test_files = helper_add_to_vec(&[r"**/*.rs"]); // this wont find anything!
 
     // init
     let mut chains: tokens::TokenChains = tokens::TokenChains::new();
 
+    #[cfg(feature = "chain_zero")]
     chains.insert(tokens::ChainId(0), std::collections::HashMap::with_capacity_and_hasher(1, ahash::RandomState::new()));
+
     chains.insert(tokens::ChainId(1), std::collections::HashMap::with_capacity_and_hasher(u8::MAX as usize, ahash::RandomState::new()));
 
     for n_gram in 2..=CTX_LEN {
@@ -197,12 +207,11 @@ fn main() {
 
     let mut bag = wordbag::WordBag::with_capacity((u8::MAX as usize) * 5);
     bag.setup_special_tokens();
+    bag.train_from_files(&test_files, CTX_LEN, PREFILL_CT);
 
-    bag.train_from_files(&test_files, CTX_LEN);
-
-    train_chains_from_files(&mut bag, &mut chains, &test_files);
+    train_chains_from_files(&bag, &mut chains, &test_files);
 
     for _ in 0..NUM_SAMPLES {
-        sample_chains_backoff(&mut bag, &mut chains);
+        sample_chains_backoff(&bag, &chains);
     }
 }

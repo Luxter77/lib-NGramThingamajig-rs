@@ -3,14 +3,14 @@ use std::hash::{BuildHasher, Hash, Hasher};
 use ahash::RandomState;
 use indexmap::{Equivalent, IndexSet};
 
-use crate::io::{get_file_readers, sliding_window_reader};
+use crate::io;
 use crate::tokens::{SpecialToken, TokenId, TokenValue};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum TokenRef<'a> {
     Special(SpecialToken),
     Normal(&'a [u8]),
-    Next(&'a u8),
+    Next(u8),
 }
 
 impl Hash for TokenRef<'_> {
@@ -26,7 +26,7 @@ impl Hash for TokenRef<'_> {
             }
             TokenRef::Next(byte) => {
                 2u8.hash(state);
-                std::slice::from_ref(byte).hash(state);
+                byte.hash(state);
             }
         }
     }
@@ -37,7 +37,7 @@ impl Equivalent<TokenValue> for TokenRef<'_> {
         match (self, key) {
             (TokenRef::Special(a), TokenValue::Special(b)) => a == b,
             (TokenRef::Normal(a), TokenValue::Normal(b)) => *a == b.as_slice(),
-            (TokenRef::Next(a), TokenValue::Next(b)) => *a == b,
+            (TokenRef::Next(a), TokenValue::Next(b)) => a == b,
             _ => false,
         }
     }
@@ -53,7 +53,7 @@ impl TokenInput for TokenValue {
         match self {
             TokenValue::Special(special) => TokenRef::Special(*special),
             TokenValue::Normal(bytes) => TokenRef::Normal(bytes.as_slice()),
-            TokenValue::Next(byte) => TokenRef::Next(byte),
+            TokenValue::Next(byte) => TokenRef::Next(*byte),
         }
     }
 
@@ -94,7 +94,7 @@ impl TokenInput for &[u8] {
 
 impl TokenInput for &u8 {
     fn as_token_ref(&self) -> TokenRef<'_> {
-        TokenRef::Next(*self)
+        TokenRef::Next(**self)
     }
 
     fn into_token_value(self) -> TokenValue {
@@ -121,7 +121,7 @@ impl TokenInput for TokenRef<'_> {
         match self {
             TokenRef::Special(special) => TokenValue::Special(special),
             TokenRef::Normal(bytes) => TokenValue::Normal(bytes.to_vec()),
-            TokenRef::Next(byte) => TokenValue::Next(*byte),
+            TokenRef::Next(byte) => TokenValue::Next(byte),
         }
     }
 }
@@ -147,6 +147,9 @@ impl WordBag<RandomState> {
     }
 
     pub fn setup_special_tokens(&mut self) {
+        for byte in u8::MIN..=u8::MAX {
+            self.s2i(TokenValue::Next(byte));
+        }
         self.s2i(SpecialToken::Start);
         self.s2i(SpecialToken::End);
         self.s2i(SpecialToken::ZeroGram);
@@ -197,22 +200,61 @@ impl<S: BuildHasher> WordBag<S> {
         self.tokens.iter()
     }
 
-    pub fn train_from_files(&mut self, files: &Vec<std::path::PathBuf>, ctx_len: usize) {
+    pub fn train_from_files(&mut self, files: &Vec<std::path::PathBuf>, ctx_len: usize, prefill_ct: u8) {
         println!("train_wordbag_from_files:");
 
+        #[cfg_attr(not(feature = "experiment-n_gram-skips"), allow(unused_labels))]
         'n_gram_iter: for n_gram in 1..=ctx_len {
             #[cfg(feature = "experiment-n_gram-skips")]
             if !n_gram.is_power_of_two() && 1 < n_gram && n_gram < ctx_len {
                 continue 'n_gram_iter;
             };
-            for file_reader in get_file_readers(files) {
+            'file_iter: for file_reader in io::get_file_readers(files) {
                 match file_reader {
                     Ok(file_reader) => {
                         if file_reader.len() < n_gram + 1 {
-                            continue 'n_gram_iter;
+                            continue 'file_iter;
                         };
-                        for window in sliding_window_reader(&file_reader, n_gram) {
-                            self.s2i(window);
+                        let mut window_iterator = io::sliding_window_reader(&file_reader, n_gram + 1);
+                        let mut window: &[u8] = &[];
+
+                        // First window is special
+                        if n_gram != 0 {
+                            if let Some(i_window) = window_iterator.next() {
+                                window = i_window;
+
+                                let mut p_window = i_window.to_vec();
+
+                                while p_window.iter().any(|&x| x != prefill_ct) {
+                                    // Splowly replace the window with
+                                    // prefill from left to right
+                                    // pushint the right out of frame
+                                    p_window.rotate_right(1);
+                                    p_window[0] = prefill_ct;
+
+                                    if let Some((_, prefix_t)) = p_window.split_last() {
+                                        self.s2i(prefix_t);
+                                    }
+                                }
+
+                                // Normal window proc
+                                if let Some((_, prefix_t)) = window.split_last() {
+                                    self.s2i(prefix_t);
+                                }
+                            }
+                        }
+
+                        // Rest of the windows
+                        for i_window in window_iterator {
+                            window = i_window;
+                            if let Some((_, prefix_t)) = window.split_last() {
+                                self.s2i(prefix_t);
+                            }
+                        }
+
+                        // Last window is also special
+                        if window.len() > 0 {
+                            self.s2i(&window[1..]);
                         }
                     }
                     Err(_) => unreachable!(),
