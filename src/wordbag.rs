@@ -4,6 +4,7 @@ use ahash::RandomState;
 use indexmap::{Equivalent, IndexSet};
 
 use crate::io;
+use crate::text;
 use crate::tokens::{SpecialToken, TokenId, TokenValue};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -200,7 +201,7 @@ impl<S: BuildHasher> WordBag<S> {
         self.tokens.iter()
     }
 
-    pub fn train_from_files(&mut self, files: &Vec<std::path::PathBuf>, ctx_len: usize, prefill_ct: u8) {
+    pub fn train_from_files(&mut self, sources: &Vec<io::Source>, ctx_len: usize, prefill_ct: u8) {
         println!("train_wordbag_from_files:");
 
         #[cfg_attr(not(feature = "experiment-n_gram-skips"), allow(unused_labels))]
@@ -209,55 +210,60 @@ impl<S: BuildHasher> WordBag<S> {
             if !n_gram.is_power_of_two() && 1 < n_gram && n_gram < ctx_len {
                 continue 'n_gram_iter;
             };
-            'file_iter: for file_reader in io::get_file_readers(files) {
-                match file_reader {
-                    Ok(file_reader) => {
-                        if file_reader.len() < n_gram + 1 {
-                            continue 'file_iter;
-                        };
-                        let mut window_iterator = io::sliding_window_reader(&file_reader, n_gram + 1);
-                        let mut window: &[u8] = &[];
 
-                        // First window is special
-                        if n_gram != 0 {
-                            if let Some(i_window) = window_iterator.next() {
-                                window = i_window;
+            'files_iter: for files in sources {
+                if !files.chain_range.contains(&n_gram) {
+                    continue 'files_iter;
+                };
+                'file_iter: for file in files.get_file_readers() {
+                    if file.mmap.len() < n_gram + 1 {
+                        continue 'file_iter;
+                    };
+                    let mut window_iterator = io::sliding_window_reader(&file.mmap, n_gram + 1);
+                    let mut window: &[u8] = &[];
 
-                                let mut p_window = i_window.to_vec();
+                    // First window is special
+                    if n_gram != 0 {
+                        if let Some(i_window) = window_iterator.next() {
+                            window = i_window;
 
-                                while p_window.iter().any(|&x| x != prefill_ct) {
-                                    // Splowly replace the window with
-                                    // prefill from left to right
-                                    // pushint the right out of frame
-                                    p_window.rotate_right(1);
-                                    p_window[0] = prefill_ct;
+                            let mut p_window = i_window.to_vec();
 
-                                    if let Some((_, prefix_t)) = p_window.split_last() {
+                            while p_window.iter().any(|&x| x != prefill_ct) {
+                                // Splowly replace the window with
+                                // prefill from left to right
+                                // pushint the right out of frame
+                                p_window.rotate_right(1);
+                                p_window[0] = prefill_ct;
+
+                                if let Some((&next_t, prefix_t)) = p_window.split_last() {
+                                    if text::is_valid_next_utf8_byte(next_t, prefix_t) {
                                         self.s2i(prefix_t);
                                     }
                                 }
+                            }
 
-                                // Normal window proc
-                                if let Some((_, prefix_t)) = window.split_last() {
+                            // Normal window proc
+                            if let Some((&next_t, prefix_t)) = window.split_last() {
+                                if text::is_valid_next_utf8_byte(next_t, prefix_t) {
                                     self.s2i(prefix_t);
                                 }
                             }
                         }
+                    }
 
-                        // Rest of the windows
-                        for i_window in window_iterator {
-                            window = i_window;
-                            if let Some((_, prefix_t)) = window.split_last() {
-                                self.s2i(prefix_t);
-                            }
-                        }
-
-                        // Last window is also special
-                        if window.len() > 0 {
-                            self.s2i(&window[1..]);
+                    // Rest of the windows
+                    for i_window in window_iterator {
+                        window = i_window;
+                        if let Some((_, prefix_t)) = window.split_last() {
+                            self.s2i(prefix_t);
                         }
                     }
-                    Err(_) => unreachable!(),
+
+                    // Last window is also special
+                    if window.len() > 0 {
+                        self.s2i(&window[1..]);
+                    }
                 }
             }
         }

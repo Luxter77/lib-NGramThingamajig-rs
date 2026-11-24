@@ -43,6 +43,10 @@ impl TokenDist {
         self.add(token, 1);
     }
 
+    pub fn increment_weighted(&mut self, token: TokenId, weight: u64) {
+        self.add(token, weight);
+    }
+
     pub fn with_capacity(capacity: usize) -> Self {
         if capacity <= 1 { TokenDist::Empty } else { TokenDist::Many(Box::new(HashMap::with_capacity_and_hasher(capacity, RandomState::new()))) }
     }
