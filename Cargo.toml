@@ -10,9 +10,10 @@ encoding_rs = "0.8.44"
 # chrono = { version = "0.4.45", features = ["serde"] }
 # flate2 = "1.1.11"
 glob = "0.3.4"
-indexmap = "2.14.2"
+indexmap = { version = "2.14.2", features = ["rayon"] }
 memmap2 = "0.9.12"
 rand = "0.10.4"
+rayon = "1.12.0"
 zzz = "0.3.2"
 # rusqlite = { version = "0.43.0", features = ["bundled", "chrono"] }
 # rust_decimal = "1.43.0"

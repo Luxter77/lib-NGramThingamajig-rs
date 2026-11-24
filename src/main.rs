@@ -3,7 +3,7 @@ mod tests;
 mod tokens;
 mod wordbag;
 
-// use rayon::iter::{IntoParallelRefMutIterator, ParallelIterator};
+use rayon::iter::{IntoParallelRefMutIterator, ParallelIterator};
 use zzz::ProgressBarIterExt as _;
 
 const CTX_LEN: usize = 15;
@@ -85,13 +85,19 @@ fn train_chains_from_files(bag: &wordbag::WordBag, chains: &mut tokens::TokenCha
     for file_reader in io::get_file_readers(files).progress() {
         match file_reader {
             Ok(file_reader) => {
-                let n_gram_iter = (CHAINS_START..=CTX_LEN).filter(|&n_gram| file_reader.len() >= n_gram + 1);
+                let chains_iter = chains.par_iter_mut().filter(|(chain_id, _)| {
+                    let n_gram = chain_id.0;
+                    (CHAINS_START..=CTX_LEN).contains(&n_gram) && file_reader.len() >= n_gram + 1
+                });
                 #[cfg(feature = "experiment-n_gram-skips")]
-                let n_gram_iter = n_gram_iter.filter(|&n_gram| n_gram.is_power_of_two() || n_gram <= 1 || n_gram >= CTX_LEN);
+                let chains_iter = chains_iter.filter(|(chain_id, _)| {
+                    let n_gram = chain_id.0;
+                    n_gram.is_power_of_two() || n_gram <= 1 || n_gram >= CTX_LEN
+                });
 
-                for n_gram in n_gram_iter {
-                    train_chain_ngram(chains.get_mut(&tokens::ChainId(n_gram)).unwrap(), &bag, n_gram, next_tokens, &file_reader);
-                }
+                chains_iter.for_each(|(chain_id, chain)| {
+                    train_chain_ngram(chain, bag, chain_id.0, next_tokens, &file_reader);
+                });
             }
             Err(_) => unreachable!(),
         }
