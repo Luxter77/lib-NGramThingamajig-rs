@@ -39,6 +39,16 @@ impl TokenDist {
         }
     }
 
+    pub fn flat(tokens: &[TokenId]) -> Self {
+        let mut this = TokenDist::Many(Box::new(HashMap::with_capacity_and_hasher(tokens.len(), RandomState::new())));
+
+        for &token in tokens {
+            this.add(token, 1);
+        }
+
+        return this;
+    }
+
     pub fn increment(&mut self, token: TokenId) {
         self.add(token, 1);
     }
@@ -49,6 +59,82 @@ impl TokenDist {
 
     pub fn with_capacity(capacity: usize) -> Self {
         if capacity <= 1 { TokenDist::Empty } else { TokenDist::Many(Box::new(HashMap::with_capacity_and_hasher(capacity, RandomState::new()))) }
+    }
+
+    #[cfg(not(feature = "constrained_sampler"))]
+    pub fn sample_basic(&self, rng: &mut rand::rngs::SmallRng) -> Option<TokenId> {
+        // The lion does not concern himself with the opinion of the UTF-8 state machine
+        match &self {
+            TokenDist::Empty => return None,
+            TokenDist::Single(id, _) => return Some(*id),
+            TokenDist::Many(map) => {
+                let total = map.values().map(|count| count.0).sum();
+                if total == 0 {
+                    return None;
+                };
+                let mut pick = rand::RngExt::random_range(rng, 0..total);
+                for (id, count) in map.iter() {
+                    if pick < count.0 {
+                        return Some(*id);
+                    }
+                    pick -= count.0;
+                }
+                return None;
+            }
+        }
+    }
+
+    #[cfg(feature = "constrained_sampler")]
+    pub fn sample_constrained(&self, rng: &mut rand::rngs::SmallRng, allowed: &[TokenId]) -> Option<TokenId> {
+        match &self {
+            TokenDist::Empty => return None,
+            TokenDist::Single(id, count) => {
+                if count.0 > 0 && allowed.contains(id) {
+                    Some(*id)
+                } else {
+                    None
+                }
+            }
+            TokenDist::Many(map) => {
+                let map: ahash::HashMap<&TokenId, &TokenCount> = map.iter().filter(|(id, _)| allowed.contains(*id)).collect();
+                let total = map.values().map(|count| count.0).sum();
+                if total == 0 {
+                    return None;
+                };
+                let mut pick = rand::RngExt::random_range(rng, 0..total);
+                for (&id, &count) in map.iter() {
+                    if pick < count.0 {
+                        return Some(*id);
+                    }
+                    pick -= count.0;
+                }
+                return None;
+            }
+        }
+    }
+
+    pub fn constrained_stats(&self, allowed: &[TokenId]) -> (u64, u64) {
+        match self {
+            TokenDist::Empty => (0, 0),
+            TokenDist::Single(id, count) => {
+                if count.0 > 0 && allowed.contains(id) {
+                    (count.0, 1)
+                } else {
+                    (0, 0)
+                }
+            }
+            TokenDist::Many(map) => {
+                let mut total: u64 = 0;
+                let mut types: u64 = 0;
+                for (id, count) in map.iter() {
+                    if count.0 > 0 && allowed.contains(id) {
+                        total += count.0;
+                        types += 1;
+                    }
+                }
+                (total, types)
+            }
+        }
     }
 }
 

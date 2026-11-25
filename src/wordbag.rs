@@ -2,6 +2,7 @@ use std::hash::{BuildHasher, Hash, Hasher};
 
 use ahash::RandomState;
 use indexmap::{Equivalent, IndexSet};
+use zzz::ProgressBarIterExt as _;
 
 use crate::io;
 use crate::text;
@@ -159,21 +160,21 @@ impl WordBag<RandomState> {
 }
 
 impl<S: BuildHasher> WordBag<S> {
-    pub fn with_hasher(hasher: S) -> Self {
-        Self::with_capacity_and_hasher(0, hasher)
-    }
+    // pub fn with_hasher(hasher: S) -> Self {
+    //     Self::with_capacity_and_hasher(0, hasher)
+    // }
 
     pub fn with_capacity_and_hasher(capacity: usize, hasher: S) -> Self {
         Self { tokens: IndexSet::with_capacity_and_hasher(capacity, hasher) }
     }
 
-    pub fn len(&self) -> usize {
-        self.tokens.len()
-    }
+    // pub fn len(&self) -> usize {
+    //     self.tokens.len()
+    // }
 
-    pub fn is_empty(&self) -> bool {
-        self.tokens.is_empty()
-    }
+    // pub fn is_empty(&self) -> bool {
+    //     self.tokens.is_empty()
+    // }
 
     pub fn i2s(&self, p_token: TokenId) -> Option<&TokenValue> {
         let idx = usize::try_from(p_token.0).ok()?;
@@ -193,32 +194,30 @@ impl<S: BuildHasher> WordBag<S> {
         TokenId(idx as u64)
     }
 
-    pub fn keys(&self) -> impl ExactSizeIterator<Item = TokenId> {
-        (0..self.tokens.len()).map(|idx| TokenId(idx as u64))
-    }
+    // pub fn keys(&self) -> impl ExactSizeIterator<Item = TokenId> {
+    //     (0..self.tokens.len()).map(|idx| TokenId(idx as u64))
+    // }
 
-    pub fn values(&self) -> impl ExactSizeIterator<Item = &TokenValue> {
-        self.tokens.iter()
-    }
+    // pub fn values(&self) -> impl ExactSizeIterator<Item = &TokenValue> {
+    //     self.tokens.iter()
+    // }
 
     pub fn train_from_files(&mut self, sources: &Vec<io::Source>, ctx_len: usize, prefill_ct: u8) {
         println!("train_wordbag_from_files:");
 
-        #[cfg_attr(not(feature = "experiment-n_gram-skips"), allow(unused_labels))]
-        'n_gram_iter: for n_gram in 1..=ctx_len {
-            #[cfg(feature = "experiment-n_gram-skips")]
-            if !n_gram.is_power_of_two() && 1 < n_gram && n_gram < ctx_len {
-                continue 'n_gram_iter;
-            };
-
-            'files_iter: for files in sources {
-                if !files.chain_range.contains(&n_gram) {
-                    continue 'files_iter;
-                };
-                'file_iter: for file in files.get_file_readers() {
-                    if file.mmap.len() < n_gram + 1 {
-                        continue 'file_iter;
+        for files in sources {
+            for file in files.get_file_readers().progress() {
+                #[cfg_attr(not(feature = "experiment-n_gram-skips"), allow(unused_labels))]
+                'n_gram_iter: for n_gram in 1..=ctx_len {
+                    if file.mmap.len() < n_gram + 1 || !file.chain_range.contains(&n_gram) {
+                        continue 'n_gram_iter;
                     };
+
+                    #[cfg(feature = "experiment-n_gram-skips")]
+                    if !n_gram.is_power_of_two() && 1 < n_gram && n_gram < ctx_len {
+                        continue 'n_gram_iter;
+                    };
+
                     let mut window_iterator = io::sliding_window_reader(&file.mmap, n_gram + 1);
                     let mut window: &[u8] = &[];
 
@@ -229,7 +228,8 @@ impl<S: BuildHasher> WordBag<S> {
 
                             let mut p_window = i_window.to_vec();
 
-                            while p_window.iter().any(|&x| x != prefill_ct) {
+                            // No, Jimmy, I don't care about files that start with 0x00 either
+                            for _ in 1..n_gram {
                                 // Splowly replace the window with
                                 // prefill from left to right
                                 // pushint the right out of frame
@@ -237,7 +237,7 @@ impl<S: BuildHasher> WordBag<S> {
                                 p_window[0] = prefill_ct;
 
                                 if let Some((&next_t, prefix_t)) = p_window.split_last() {
-                                    if text::is_valid_next_utf8_byte(next_t, prefix_t) {
+                                    if !prefix_t.iter().all(|&x| x == prefill_ct) && text::is_valid_next_utf8_byte(next_t, prefix_t) {
                                         self.s2i(prefix_t);
                                     }
                                 }
