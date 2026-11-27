@@ -2,11 +2,12 @@ use std::hash::{BuildHasher, Hash, Hasher};
 
 use ahash::RandomState;
 use indexmap::{Equivalent, IndexSet};
-use zzz::ProgressBarIterExt as _;
 
+use crate::PREFILL_CT;
 use crate::io;
 use crate::text;
 use crate::tokens::{SpecialToken, TokenId, TokenValue};
+use crate::math;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum TokenRef<'a> {
@@ -202,22 +203,18 @@ impl<S: BuildHasher> WordBag<S> {
     //     self.tokens.iter()
     // }
 
-    pub fn train_from_files(&mut self, sources: &Vec<io::Source>, ctx_len: usize, prefill_ct: u8) {
+    pub fn train_from_files(&mut self, sources: &Vec<io::Source>) {
         println!("train_wordbag_from_files:");
 
+        let n_gram_iter = math::build_active_orders(); 
+        
         for files in sources {
-            for file in files.get_file_readers().progress() {
-                #[cfg_attr(not(feature = "experiment-n_gram-skips"), allow(unused_labels))]
-                'n_gram_iter: for n_gram in 1..=ctx_len {
-                    if file.mmap.len() < n_gram + 1 || !file.chain_range.contains(&n_gram) {
+            for file in files.get_file_readers() {
+                'n_gram_iter: for &n_gram in n_gram_iter.iter() {
+                    if file.mmap.len() < n_gram + 1 || !file.chain_range.contains(&n_gram) || n_gram == 0 {
                         continue 'n_gram_iter;
                     };
-
-                    #[cfg(feature = "experiment-n_gram-skips")]
-                    if !n_gram.is_power_of_two() && 1 < n_gram && n_gram < ctx_len {
-                        continue 'n_gram_iter;
-                    };
-
+                    
                     let mut window_iterator = io::sliding_window_reader(&file.mmap, n_gram + 1);
                     let mut window: &[u8] = &[];
 
@@ -234,10 +231,10 @@ impl<S: BuildHasher> WordBag<S> {
                                 // prefill from left to right
                                 // pushint the right out of frame
                                 p_window.rotate_right(1);
-                                p_window[0] = prefill_ct;
+                                p_window[0] = PREFILL_CT;
 
                                 if let Some((&next_t, prefix_t)) = p_window.split_last() {
-                                    if !prefix_t.iter().all(|&x| x == prefill_ct) && text::is_valid_next_utf8_byte(next_t, prefix_t) {
+                                    if !prefix_t.iter().all(|&x| x == PREFILL_CT) && text::is_valid_next_utf8_byte(next_t, prefix_t) {
                                         self.s2i(prefix_t);
                                     }
                                 }

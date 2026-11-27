@@ -1,4 +1,5 @@
 mod io;
+mod math;
 mod text;
 mod tokens;
 mod wordbag;
@@ -6,14 +7,15 @@ mod wordbag;
 use rayon::iter::{IntoParallelRefMutIterator, ParallelIterator};
 use zzz::ProgressBarIterExt as _;
 
-const CTX_LEN: usize = 14;
-const SAMPLE_SEQ: usize = 3000;
+const CTX_LEN: usize = 24;
+const SAMPLE_SEQ: usize = 10000;
 const PREFILL_CT: u8 = 0;
 const NUM_SAMPLES: usize = 10;
-const BACKOFF_ALPHA: f64 = 0.40;
+const BACKOFF_ALPHA: f64 = 0.25;
 
 #[cfg(feature = "chain_zero")]
 const CHAINS_START: usize = 0;
+
 #[cfg(not(feature = "chain_zero"))]
 const CHAINS_START: usize = 1;
 
@@ -41,8 +43,11 @@ fn train_chain_ngram(
 
             // Token Start
             if let Some(&first) = p_window.first() {
-                if text::is_valid_next_utf8_byte(first, &[]) {
-                    chain.entry(token_start).or_default().increment_weighted(next_tokens[first as usize], file_weight);
+                if text::is_valid_next_utf8_byte(first, &[]) {                    
+                    // Using the weight for the start ones seem to generally produce poor resoults...
+                    // TODO: Put a feature flag on this
+                    // chain.entry(token_start).or_default().increment_weighted(next_tokens[first as usize], file_weight);
+                    chain.entry(token_start).or_default().increment(next_tokens[first as usize]);
                 }
             }
 
@@ -63,7 +68,10 @@ fn train_chain_ngram(
                             prefix_t_t = bag.get_id(prefix_t).unwrap();
                         }
                         dist = chain.entry(prefix_t_t).or_default();
-                        dist.increment_weighted(next_tokens[next_t as usize], file_weight);
+                        // Using the weight for the start ones seem to generally produce poor resoults...
+                        // TODO: Put a feature flag on this
+                        // dist.increment_weighted(next_tokens[next_t as usize], file_weight);
+                        dist.increment(next_tokens[next_t as usize]);
                     }
                 }
             }
@@ -97,22 +105,19 @@ fn train_chain_ngram(
 
 fn train_chains_from_files(bag: &wordbag::WordBag, chains: &mut tokens::TokenChains, sources: &Vec<io::Source>) {
     let next_tokens: [tokens::TokenId; u8::MAX as usize + 1] = std::array::from_fn(|i| bag.get_id(tokens::TokenValue::Next(i as u8)).unwrap());
-
+    let train_ngrams: Vec<usize> = math::build_active_orders();
+    
     println!("train_chains_from_files:");
     for source in sources {
-        for file in source.get_file_readers().progress() {
+        for file in source.get_file_readers() {
             let chains_iter = chains.par_iter_mut().filter(|(chain_id, _)| {
                 let n_gram = chain_id.0;
-                let chain_range = file.chain_range.contains(&n_gram);
-                let chain_train = (CHAINS_START..=CTX_LEN).contains(&n_gram);
-                let file_len = file.mmap.len() >= n_gram + 1;
-                chain_range && chain_train && file_len
-            });
 
-            #[cfg(feature = "experiment-n_gram-skips")]
-            let chains_iter = chains_iter.filter(|(chain_id, _)| {
-                let n_gram = chain_id.0;
-                n_gram.is_power_of_two() || n_gram <= 1 || n_gram >= CTX_LEN
+                let chain_range = file.chain_range.contains(&n_gram);
+                let chain_train = train_ngrams.contains(&n_gram);
+                let file_len = file.mmap.len() >= n_gram + 1;
+                
+                chain_range && chain_train && file_len
             });
 
             chains_iter.for_each(|(chain_id, chain)| {
@@ -145,7 +150,7 @@ pub fn select_dist<'a>(
     zero_gram
 }
 
-fn sample_chains_backoff(bag: &wordbag::WordBag, chains: &tokens::TokenChains) {
+fn sample_chains_backoff(bag: &wordbag::WordBag, chains: &tokens::TokenChains, backoff_alpha: f64) {
     let mut rng: rand::rngs::SmallRng = rand::make_rng();
     let mut prefix_t: [u8; CTX_LEN] = [PREFILL_CT; CTX_LEN];
     let mut output: Vec<u8> = Vec::with_capacity(SAMPLE_SEQ);
@@ -154,10 +159,8 @@ fn sample_chains_backoff(bag: &wordbag::WordBag, chains: &tokens::TokenChains) {
     let token_zero_gram = bag.get_id(tokens::SpecialToken::ZeroGram).unwrap();
     let token_start = bag.get_id(tokens::SpecialToken::Start).unwrap();
     let token_end = bag.get_id(tokens::SpecialToken::End).unwrap();
-    let n_gram_iter = (CHAINS_START..=CTX_LEN).rev();
-
-    #[cfg(feature = "experiment-n_gram-skips")]
-    let n_gram_iter = n_gram_iter.filter(|&n_gram| n_gram.is_power_of_two() || n_gram <= 1 || n_gram >= CTX_LEN);
+    let mut n_gram_iter = math::build_active_orders();
+    n_gram_iter.reverse();
 
     println!("sample_chains:");
     'sample: for _ in (0..SAMPLE_SEQ).progress() {
@@ -166,8 +169,7 @@ fn sample_chains_backoff(bag: &wordbag::WordBag, chains: &tokens::TokenChains) {
         allowed_next_ts.push(token_end);
 
         let dists: Vec<&tokens::TokenDist> = n_gram_iter
-            .clone()
-            .filter_map(|n_gram| {
+            .iter().filter_map(|&n_gram| {
                 let this_prefix_t: tokens::TokenId;
                 if n_gram == 0 {
                     this_prefix_t = token_zero_gram;
@@ -189,7 +191,7 @@ fn sample_chains_backoff(bag: &wordbag::WordBag, chains: &tokens::TokenChains) {
         #[cfg(feature = "chain_zero")]
         let zero_gram_dist: &tokens::TokenDist = chains.get(&tokens::ChainId(0)).unwrap().get(&token_zero_gram).unwrap();
 
-        let dist: &tokens::TokenDist = select_dist(&dists, zero_gram_dist, &allowed_next_ts, BACKOFF_ALPHA, &mut rng);
+        let dist: &tokens::TokenDist = select_dist(&dists, zero_gram_dist, &allowed_next_ts, backoff_alpha, &mut rng);
 
         let sample: tokens::TokenId;
         #[cfg(feature = "constrained_sampler")]
@@ -239,9 +241,9 @@ fn sample_chains_backoff(bag: &wordbag::WordBag, chains: &tokens::TokenChains) {
 
 fn main() {
     let test_files: Vec<io::Source> = vec![
-        io::Source::from_glob(1, CHAINS_START..=(CTX_LEN - 10), r"/home/subject/opt/lib-NGramThingamajig-rs/target/release/lib-ngramthingamajig-rs"),
-        io::Source::from_glob(0, CHAINS_START..=(CTX_LEN - 10), r"/home/subject/bin/*"),
-        io::Source::from_glob(1, CHAINS_START..=(CTX_LEN - 10), r"src/*.rs"),
+        io::Source::from_glob(1, CHAINS_START..=(CTX_LEN - 04), r"target/release/lib-ngramthingamajig-rs"),
+        // io::Source::from_glob(0, CHAINS_START..=(CTX_LEN - 04), r"/home/subject/bin/*"),
+        io::Source::from_glob(1, CHAINS_START..=(CTX_LEN - 04), r"src/*.rs"),
     ];
 
     // init
@@ -258,11 +260,16 @@ fn main() {
 
     let mut bag = wordbag::WordBag::with_capacity((u8::MAX as usize) * 5);
     bag.setup_special_tokens();
-    bag.train_from_files(&test_files, CTX_LEN, PREFILL_CT);
+    bag.train_from_files(&test_files);
 
     train_chains_from_files(&bag, &mut chains, &test_files);
 
     for _ in 0..NUM_SAMPLES {
-        sample_chains_backoff(&bag, &chains)
+        println!("\n\nSAMPLE WITH BACKOFF_ALPHA = {:}\n", BACKOFF_ALPHA);
+        sample_chains_backoff(&bag, &chains, BACKOFF_ALPHA);
+        println!("SAMPLE WITH BACKOFF_ALPHA = {:}", BACKOFF_ALPHA * 2.0);
+        sample_chains_backoff(&bag, &chains, BACKOFF_ALPHA * 2.0);
+        println!("SAMPLE WITH BACKOFF_ALPHA = {:}", BACKOFF_ALPHA * 10.0);
+        sample_chains_backoff(&bag, &chains, BACKOFF_ALPHA * 10.0);
     }
 }

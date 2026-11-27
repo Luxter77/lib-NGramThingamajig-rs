@@ -22,7 +22,7 @@ zzz = "0.3.2"
 # sysinfo = "0.40.4"
 
 [features]
-default = ["constrained_sampler"]
+default = ["constrained_sampler", "chain_zero"]
 constrained_sampler = []
 chain_zero = []
 experiment-n_gram-skips = []
